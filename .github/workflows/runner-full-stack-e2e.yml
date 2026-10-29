@@ -1690,7 +1690,7 @@ jobs:
           AWS_DEFAULT_REGION: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
         run: |
           node "$GITHUB_WORKSPACE/cli/node_modules/tsx/dist/cli.mjs" "$GITHUB_WORKSPACE/tests/runner-e2e/manual-private-transfer.ts" upload-report
-          echo 'The complete manual evidence report is retained in restricted private history storage. No raw Actions artifact or public page was uploaded.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'The private report archive is retained. Transfer does not certify feature PASS or required evidence completeness; see its typed receipt. No raw Actions artifact or public page was uploaded.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify normalized history source report
         id: history_source_ready

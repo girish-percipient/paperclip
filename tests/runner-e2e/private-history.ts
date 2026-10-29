@@ -46,6 +46,12 @@ export async function verifyPrivateHistory(publisher: BoundedHistoryPublisher, b
   }
 }
 
+export interface PrivateEvidenceCompleteness {
+  meaning: "available-files-and-transfer-only";
+  doesNotAttestFeatureOutcome: true;
+  cells: Array<{ executionId: string; availableFileInventoryComplete: true; requiredPassEvidenceComplete: boolean | null; missingRequiredEvidence: string[] }>;
+}
+
 type TransferOptions = {
   operation: "upload" | "download";
   kind: string;
@@ -54,6 +60,7 @@ type TransferOptions = {
   bucket: string;
   publisher: BoundedHistoryPublisher;
   receiptIdentity?: string;
+  evidenceCompleteness?: PrivateEvidenceCompleteness;
 };
 
 function privateTransferReceiptKey(options: TransferOptions) {
@@ -111,6 +118,7 @@ export async function retainPrivateTransfer(options: TransferOptions, receipt: s
     await options.publisher.save();
     const snapshot = JSON.stringify({ ...JSON.parse(await readFile(receipt, "utf8")),
       ...(options.receiptIdentity === undefined ? {} : { receiptIdentity: options.receiptIdentity }),
+      ...(options.evidenceCompleteness === undefined ? {} : { evidenceCompleteness: options.evidenceCompleteness }),
       transfer: result ? { status: "complete", ...result } : { status: "failed_or_unknown" },
       receiptUpload: { status: "pending_at_snapshot", maxBytes: 1024 * 1024 } });
     if (Buffer.byteLength(snapshot) > 1024 * 1024) throw new Error("Private transfer receipt exceeds allowance");

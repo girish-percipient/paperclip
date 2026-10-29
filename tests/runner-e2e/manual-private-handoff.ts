@@ -55,6 +55,7 @@ export async function sealStandardOriginalEvidence(input: {
   await mkdir(out, { mode: 0o700 });
   const records: Array<{ path: string; bytes: number; sha256: string }> = [];
   let visited = 0, bytes = 0;
+  let missingRequiredEvidence: string[] = [];
   async function visit(relative: string) {
     for (const entry of await readdir(path.join(root, relative), { withFileTypes: true })) {
       if (++visited > 4096) throw new Error("Complete original evidence exceeds entry allowance");
@@ -98,14 +99,16 @@ export async function sealStandardOriginalEvidence(input: {
     await mkdir(validation, { mode: 0o700 });
     try {
       const scan = await packageEvidence({ privateDir: out, uploadDir: validation, secrets, expectPassScreenshot: input.expectPassScreenshot });
-      if (scan.leaks.length || scan.missing.length) {
-        await writeFile(path.join(input.context.root, "contamination.json"), JSON.stringify({ protocol: MANUAL_PRIVATE_PROTOCOL, status: scan.leaks.length ? "withheld_credential_contamination" : "required_evidence_missing", complete: false }), { mode: 0o600, flag: "wx" });
+      missingRequiredEvidence = scan.missing;
+      if (scan.leaks.length) {
+        await writeFile(path.join(input.context.root, "contamination.json"), JSON.stringify({ protocol: MANUAL_PRIVATE_PROTOCOL, status: "withheld_credential_contamination", complete: false }), { mode: 0o600, flag: "wx" });
         throw new Error("Original evidence failed unchanged privacy or required-file checks");
       }
     } finally { await rm(validation, { recursive: true, force: true }); }
     records.sort((a, b) => a.path.localeCompare(b.path));
     const receipt = { protocol: MANUAL_PRIVATE_PROTOCOL, executionId: input.executionId, targetSha: input.context.targetSha,
-      complete: true, sourceBytes: bytes, files: records, inventorySha256: createHash("sha256").update(JSON.stringify(records)).digest("hex") };
+      complete: true, requiredEvidenceComplete: input.expectPassScreenshot ? missingRequiredEvidence.length === 0 : null,
+      missingRequiredEvidence, sourceBytes: bytes, files: records, inventorySha256: createHash("sha256").update(JSON.stringify(records)).digest("hex") };
     const serialized = `${JSON.stringify(receipt, null, 2)}\n`;
     assertSecretFree(serialized, secrets, "private evidence inventory");
     await writeFile(path.join(out, "original-evidence-inventory.json"), serialized, { mode: 0o600, flag: "wx" });

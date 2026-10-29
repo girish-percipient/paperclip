@@ -115,9 +115,14 @@ still apply. Original text, ZIP and media bytes receive those scans before
 retention. Raw and encoded registered roots and provider-shaped names are also
 rejected from original paths and inventories. Unknown extensions and SVG files
 that the ordinary packager does not inspect cannot become complete originals.
-Files cannot be silently dropped to meet a bound. Missing required evidence,
-contamination, unsupported carriers or a changed inventory stop the transfer.
-No secret-bearing original is uploaded just because the bucket is private.
+Files cannot be silently dropped to meet a bound. Credential contamination,
+unsupported carriers or a changed inventory stop the transfer. Missing required
+PASS files still convert the attempt to infrastructure FAIL. The private inventory
+retains all safe available originals and records `requiredEvidenceComplete: false`
+and the exact missing list. Its `complete` field means the available file inventory
+is complete; it does not certify PASS evidence completeness. Failed framework
+attempts do not claim that PASS evidence checks ran. No file is synthesized and
+no secret-bearing original is uploaded just because the bucket is private.
 
 The existing archive bounds remain unchanged: at most 256 MiB of source files,
 4,097 archive entries and 264 MiB transferred archive bytes. Duplicated original

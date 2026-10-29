@@ -28,8 +28,11 @@ it("a genuine credential match remains fatal and no contaminated original is sea
  const f=await fixture();f.input.secrets=["synthetic-provider-credential-1234567890"];await writeFile(path.join(f.source,"snapshots/secret.json"),JSON.stringify({value:f.input.secrets[0]}));
  await expect(sealStandardOriginalEvidence(f.input)).rejects.toThrow(/privacy/);expect(JSON.parse(await readFile(path.join(f.out,"contamination.json"),"utf8"))).toMatchObject({complete:false,status:"withheld_credential_contamination"});
 });
-it("the existing required pass PNG/HTML/blob contract is still enforced",async()=>{
- const f=await fixture();f.input.expectPassScreenshot=true;await expect(sealStandardOriginalEvidence(f.input)).rejects.toThrow(/required-file/);
+it("retains all safe available originals while required pass evidence remains explicitly incomplete",async()=>{
+ const f=await fixture();f.input.expectPassScreenshot=true;const receipt=await sealStandardOriginalEvidence(f.input);
+ expect(receipt.complete).toBe(true);expect(receipt.requiredEvidenceComplete).toBe(false);
+ expect(receipt.missingRequiredEvidence).toContain("final-state.png");expect(receipt.missingRequiredEvidence).toContain("blob-report/*.zip");
+ expect(receipt.files.map(row=>row.path)).toContain("failure.png");
 });
 it("does not copy an escaped or symlinked original",async()=>{
  const f=await fixture();await symlink(path.join(f.source,"snapshots/state.json"),path.join(f.source,"snapshots/link.json"));await expect(sealStandardOriginalEvidence(f.input)).rejects.toThrow(/unsupported/);
@@ -57,4 +60,14 @@ it.each(["raw", "url", "base64", "shape"])("rejects %s credential-bearing origin
  if(kind==="raw")f.input.secrets=[name];
  await writeFile(path.join(f.source,"snapshots",`${name}.json`),'{}');
  await expect(sealStandardOriginalEvidence(f.input)).rejects.toThrow(/Secret leak/);
+});
+it("retains original framework PASS and actual missing-evidence infrastructure FAIL as separate bytes",async()=>{
+ const f=await fixture();await writeFile(path.join(f.source,"result.json"),'{"status":"passed"}');
+ await preserveOriginalFrameworkResult(f.source);
+ await writeFile(path.join(f.source,"result.json"),'{"status":"failed","failureClass":"permanent_infrastructure","error":"Required evidence missing: final-state.png"}');
+ const receipt=await sealStandardOriginalEvidence({...f.input,expectPassScreenshot:true});
+ expect(receipt.requiredEvidenceComplete).toBe(false);
+ const {manualCellKind}=await import("./manual-private-retention.js"),dir=path.join(f.out,"originals",manualCellKind(f.input.executionId));
+ expect(JSON.parse(await readFile(path.join(dir,"snapshots/manual-original-framework-result.json"),"utf8")).status).toBe("passed");
+ expect(JSON.parse(await readFile(path.join(dir,"result.json"),"utf8"))).toMatchObject({status:"failed",failureClass:"permanent_infrastructure"});
 });

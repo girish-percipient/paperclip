@@ -4,7 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { isStandardEvidenceFile } from "./evidence.js";
 import { BoundedHistoryPublisher } from "./history-budget.js";
-import { privateArtifactKey, retainPrivateTransfer, transferPrivateArtifact, verifyPrivateHistory } from "./private-history.js";
+import { privateArtifactKey, retainPrivateTransfer, transferPrivateArtifact, verifyPrivateHistory, type PrivateEvidenceCompleteness } from "./private-history.js";
 import { authorizeManualPrivateEvidence, MANUAL_PRIVATE_PROTOCOL, manualCellKind, manualPrivateSessionPolicy } from "./manual-private-retention.js";
 
 const hash = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -77,7 +77,17 @@ export async function validateSealedInventory(directory: string, inventory: stri
   return receipt;
 }
 export async function validateSealedOriginals(root: string, id: string) {
-  return validateSealedInventory(path.join(root, "originals", manualCellKind(id)), "original-evidence-inventory.json", id);
+  const receipt = await validateSealedInventory(path.join(root, "originals", manualCellKind(id)), "original-evidence-inventory.json", id);
+  const missing = receipt.missingRequiredEvidence;
+  const allowed = new Set(["final-state.png", "result.json", "junit.xml", "html-report/index.html", "snapshots/fixtures.json", "snapshots/api-state.json", "blob-report/*.zip"]);
+  if (![true, false, null].includes(receipt.requiredEvidenceComplete) || !Array.isArray(missing) || new Set(missing).size !== missing.length
+    || missing.some((name: unknown) => typeof name !== "string" || !allowed.has(name))
+    || (receipt.requiredEvidenceComplete === false) !== (missing.length > 0)) throw new Error("Required evidence completeness is unknown");
+  return receipt;
+}
+function cellCompleteness(id: string, receipt: { requiredEvidenceComplete: boolean | null; missingRequiredEvidence: string[] }): PrivateEvidenceCompleteness {
+  return { meaning: "available-files-and-transfer-only", doesNotAttestFeatureOutcome: true,
+    cells: [{ executionId: id, availableFileInventoryComplete: true, requiredPassEvidenceComplete: receipt.requiredEvidenceComplete, missingRequiredEvidence: receipt.missingRequiredEvidence }] };
 }
 async function uploadCell(env: NodeJS.ProcessEnv) {
   requireSession(env); const { approval, bucket } = request(env), id = env.SELECTED_EXECUTION_ID!;
@@ -87,16 +97,17 @@ async function uploadCell(env: NodeJS.ProcessEnv) {
     || context.runId !== approval.runId || context.executionIds.join() !== id || context.root !== root) throw new Error("Private evidence preflight identity changed");
   if (await lstat(path.join(root, "contamination.json")).then(() => true, error => { if (error.code === "ENOENT") return false; throw error; }))
     throw new Error("Contaminated private evidence cannot be uploaded");
-  await validateSealedOriginals(root, id);
+  const originals = await validateSealedOriginals(root, id);
+  const evidenceCompleteness = cellCompleteness(id, originals);
   const bundle = path.join(root, "sealed-bundle"); await mkdir(bundle, { mode: 0o700 });
   const results = path.join(root, "sealed-results");
   await validateSealedInventory(path.join(results, "html-report"), "../result-evidence-inventory.json");
   await mkdir(path.join(bundle, "originals"), { mode: 0o700 });
   await cp(path.join(root, "originals", manualCellKind(id)), path.join(bundle, "originals", manualCellKind(id)), { recursive: true, errorOnExist: true, force: false });
   await cp(results, path.join(bundle, "sealed-results"), { recursive: true, errorOnExist: true, force: false });
-  await writeFile(path.join(bundle, "identity.json"), JSON.stringify(context), { mode: 0o600, flag: "wx" });
+  await writeFile(path.join(bundle, "identity.json"), JSON.stringify({ ...context, evidenceCompleteness }), { mode: 0o600, flag: "wx" });
   const receipt = path.join(root, "cell-transfer.json"), publisher = new BoundedHistoryPublisher(receipt);
-  await retainPrivateTransfer({ operation: "upload", kind: manualCellKind(id), runId: approval.runId, directory: bundle, bucket, publisher }, receipt,
+  await retainPrivateTransfer({ operation: "upload", kind: manualCellKind(id), runId: approval.runId, directory: bundle, bucket, publisher, evidenceCompleteness }, receipt,
     () => new BoundedHistoryPublisher(`${receipt}.retention.json`));
 }
 async function reportSession(env: NodeJS.ProcessEnv) {
@@ -106,9 +117,10 @@ async function reportSession(env: NodeJS.ProcessEnv) {
 async function downloadCells(env: NodeJS.ProcessEnv) {
   requireSession(env); const { approval, bucket } = request(env), root = await realpath(env.PRIVATE_REPORT_ROOT ?? "");
   const selected = path.join(root, "selected-runner-e2e"); await mkdir(selected, { mode: 0o700 });
+  const cells: PrivateEvidenceCompleteness["cells"] = [];
   for (const id of approval.executionIds) {
     const directory = path.join(root, manualCellKind(id)), publisher = new BoundedHistoryPublisher(path.join(root, `${manualCellKind(id)}-download.json`));
-    const receipt = await publisher.downloadJson<{ transfer?: { status?: string; sha256?: string } }>(bucket,
+    const receipt = await publisher.downloadJson<{ evidenceCompleteness?: PrivateEvidenceCompleteness; transfer?: { status?: string; sha256?: string } }>(bucket,
       `${privateArtifactKey(manualCellKind(id), approval.runId)}.upload-receipt.json`, path.join(root, `${manualCellKind(id)}-receipt.json`));
     if (receipt?.transfer?.status !== "complete" || !/^[0-9a-f]{64}$/.test(receipt.transfer.sha256 ?? "")) throw new Error("Private cell transfer receipt is unavailable");
     const downloaded = await transferPrivateArtifact({ operation: "download", kind: manualCellKind(id), runId: approval.runId, directory, bucket, publisher });
@@ -116,16 +128,23 @@ async function downloadCells(env: NodeJS.ProcessEnv) {
     const identity = JSON.parse(await readFile(path.join(directory, "identity.json"), "utf8"));
     if (identity.targetSha !== approval.targetSha || identity.workflowSha !== approval.workflowSha || identity.runId !== approval.runId
       || identity.executionIds.join() !== id || identity.protocol !== MANUAL_PRIVATE_PROTOCOL) throw new Error("Private cell archive has a foreign identity");
-    await validateSealedOriginals(directory, id);
+    const originals = await validateSealedOriginals(directory, id), summary = cellCompleteness(id, originals);
+    if (hash(JSON.stringify(identity.evidenceCompleteness)) !== hash(JSON.stringify(summary))
+      || hash(JSON.stringify(receipt.evidenceCompleteness)) !== hash(JSON.stringify(summary))) throw new Error("Private evidence completeness receipt differs from archive");
+    cells.push(...summary.cells);
     await validateSealedInventory(path.join(directory, "sealed-results", "html-report"), "../result-evidence-inventory.json");
     await cp(path.join(directory, "sealed-results", "html-report"), path.join(selected, manualCellKind(id)), { recursive: true, errorOnExist: true, force: false });
   }
+  await writeFile(path.join(root, "manual-report-input-completeness.json"), JSON.stringify({ meaning: "available-files-and-transfer-only", doesNotAttestFeatureOutcome: true, cells }), { mode: 0o600, flag: "wx" });
 }
 async function uploadReport(env: NodeJS.ProcessEnv) {
   requireSession(env); const { approval, bucket } = request(env), source = await realpath(env.PRIVATE_REPORT_SOURCE ?? ""), root = await realpath(env.PRIVATE_REPORT_ROOT ?? "");
   if (!source.startsWith(`${root}${path.sep}`)) throw new Error("Private report escaped owned staging");
+  const evidenceCompleteness = JSON.parse(await readFile(path.join(root, "manual-report-input-completeness.json"), "utf8")) as PrivateEvidenceCompleteness;
+  if (evidenceCompleteness.meaning !== "available-files-and-transfer-only" || evidenceCompleteness.doesNotAttestFeatureOutcome !== true
+    || evidenceCompleteness.cells.map(cell => cell.executionId).sort().join() !== [...approval.executionIds].sort().join()) throw new Error("Private report lacks exact cell completeness receipts");
   const receipt = path.join(root, "report-transfer.json"), publisher = new BoundedHistoryPublisher(receipt);
-  await retainPrivateTransfer({ operation: "upload", kind: "manual-report", runId: approval.runId, directory: source, bucket, publisher }, receipt,
+  await retainPrivateTransfer({ operation: "upload", kind: "manual-report", runId: approval.runId, directory: source, bucket, publisher, evidenceCompleteness }, receipt,
     () => new BoundedHistoryPublisher(`${receipt}.retention.json`));
 }
 async function main() {
