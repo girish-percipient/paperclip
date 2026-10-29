@@ -922,9 +922,11 @@ export async function recoverCommittedNativeChatResponse(
         return false;
       // An existing selected answer, including a subsequently deleted one, must
       // never be replaced or resurrected by a background presentation repair.
+      const recordedPresentation = record(record(run.resultJson).presentationDecision);
       if (
-        typeof record(record(run.resultJson).presentationDecision).commentId ===
-        "string"
+        typeof recordedPresentation.commentId === "string" ||
+        (recordedPresentation.commentAction !== undefined && recordedPresentation.commentAction !== "create") ||
+        record(run.contextSnapshot).skipIssueComment === true
       )
         return false;
       const [coordinator] = await tx
@@ -1762,7 +1764,7 @@ export async function finalizeNativeRun(input: {
       }
       if (input.projectRunStatus)
         await materializeCommittedReviewResponse(input.db, input.runId);
-      if (input.projectRunStatus && finalizationPhase === "committed")
+      if (input.projectRunStatus && finalizationPhase === "committed" && !input.skipNativeResponsePresentation)
         await repairCommittedNativeChatResponse(input.db, {
           companyId: run.companyId,
           issueId: coordinator.issueId,

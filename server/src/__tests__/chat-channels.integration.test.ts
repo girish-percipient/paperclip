@@ -1,3 +1,4 @@
+import { notifyNativeFinalizationWork } from "../services/native-finalization-notifications.js";
 import { nativeResponsePresentationWork } from "../services/native-runtime/native-response-presentation-work.js";
 import { notifyChatRunMilestones } from "../services/chat-run-milestone-notifications.js";
 import { registerGitHubReviewProjectionWork } from "../services/chat-channels/github/review-projection-work.js";
@@ -151,6 +152,7 @@ import {
   issues,
   nativeRunResults,
   nativeRunFinalizations,
+  statusDecisions,
   statusDecisionEffects,
   environmentLeases,
   environments,
@@ -74273,6 +74275,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       context: Awaited<ReturnType<typeof failedChatRetryFixture>>,
     ) => Promise<void>,
     summary?: (issueId: string) => string,
+    finalize = true,
   ) {
     const context = await failedChatRetryFixture(
       provider,
@@ -74427,7 +74430,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       .from(nativeRunResults)
       .where(eq(nativeRunResults.runId, context.runId));
     const accepted = { resultId: acceptedRow.id };
-    await finalizeNativeRun({
+    if (finalize) await finalizeNativeRun({
       db,
       runId: context.runId,
       workspaceFinalizeStatus: "succeeded",
@@ -74436,7 +74439,8 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       .select()
       .from(nativeRunFinalizations)
       .where(eq(nativeRunFinalizations.runId, context.runId));
-    expect(coordinator.phase).toBe("committed");
+    if (finalize) expect(coordinator.phase).toBe("committed");
+    else expect(coordinator.phase).not.toBe("committed");
     await db
       .update(heartbeatRuns)
       .set({
@@ -75280,6 +75284,97 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
     },
   );
 
+  it.each(["none", "reuse"] as const)("preserves a recorded %s presentation instead of recovering an unsolicited answer", async commentAction => {
+    const context = await committedChatResponseRecoveryFixture("telegram");
+    const presentationDecision = { commentAction, commentId: null, reasonCodes: ["interaction_owns_response"] };
+    try {
+      await db.update(heartbeatRuns).set({ resultJson: { presentationDecision } }).where(eq(heartbeatRuns.id, context.runId));
+      await expect(recoverCommittedNativeChatResponse(db, { companyId: context.fixture.companyId,
+        issueId: context.issue.id, runId: context.runId })).resolves.toBe(false);
+      expect(await nativeResponsePresentationWork(db).load({ companyId: context.fixture.companyId, runId: context.runId })).toEqual([]);
+      expect(await db.select().from(issueComments).where(eq(issueComments.createdByRunId, context.runId))).toEqual([]);
+      expect(await readChatPublicationsByEndpointId(context.endpoint.id)).toEqual([]);
+      expect((await readHeartbeatRunsById(context.runId))[0].resultJson).toEqual({ presentationDecision });
+    } finally { await context.service.shutdown(); }
+  });
+
+  it.each(["create", "legacy", "missing"] as const)("recovers a genuine unanswered %s presentation", async action => {
+    const context = await committedChatResponseRecoveryFixture("telegram");
+    try {
+      await db.update(heartbeatRuns).set({ resultJson: action === "missing" ? {} : {
+        presentationDecision: { commentId: null, ...(action === "create" ? { commentAction: "create" } : {}) },
+      } }).where(eq(heartbeatRuns.id, context.runId));
+      const work = nativeResponsePresentationWork(db);
+      const entries = await work.load({ companyId: context.fixture.companyId, runId: context.runId });
+      expect(entries).toHaveLength(1);
+      await expect(work.check(entries[0])).resolves.toBeNull();
+      expect(await readChatPublicationsByEndpointId(context.endpoint.id)).toHaveLength(1);
+      await expect(context.repair()).resolves.toBe(false);
+    } finally { await context.service.shutdown(); }
+  });
+
+  it.each(["conversation_done", "attention_request", "same_agent_reason", "monitor_reason", "skip_comment"] as const)(
+    "does not lock durably ineligible %s history on repeated issue milestones", async kind => {
+      const context = await committedChatResponseRecoveryFixture("telegram");
+      await context.service.shutdown();
+      await db.update(heartbeatRuns).set({ status: "succeeded",
+        ...(kind === "skip_comment" ? { contextSnapshot: { skipIssueComment: true } } : {}) }).where(eq(heartbeatRuns.id, context.runId));
+      const [accepted] = await db.select().from(nativeRunResults).where(eq(nativeRunResults.id, context.accepted.resultId));
+      const envelope = accepted.resultJson as { result: PrpStructuredRunResult; terminal: PrpTerminalState };
+      if (kind === "conversation_done") {
+        envelope.result = { ...envelope.result, reportedWorkDisposition: "done" };
+        envelope.terminal = { ...envelope.terminal, reportedWorkDisposition: "done" };
+        await db.update(issues).set({ conversationAgentId: context.fixture.assignedAgentId, conversationUserId: "owner-user", conversationState: "active", assigneeUserId: null })
+          .where(eq(issues.id, context.issue.id));
+      } else if (kind === "attention_request") {
+        envelope.result = { ...envelope.result, attentionRequests: [{ kind: "review", summary: "Needs a decision", ownerClass: "human" }] };
+      } else if (kind === "same_agent_reason" || kind === "monitor_reason") {
+        envelope.result = { ...envelope.result, continuation: { ...envelope.result.continuation,
+          kind: kind === "same_agent_reason" ? "same_agent" : "monitor" } as PrpStructuredRunResult["continuation"] };
+        await db.update(statusDecisions).set({ reasonCode: "external_chat_response_waiting" })
+          .where(eq(statusDecisions.id, context.coordinator.decisionId!));
+      }
+      await db.update(nativeRunResults).set({ resultJson: envelope }).where(eq(nativeRunResults.id, accepted.id));
+      const errors: unknown[] = [];
+      const coordinator = createDeliveryWorkCoordinator({ owner: db, canRun: () => true, onError: error => errors.push(error) });
+      const work = nativeResponsePresentationWork(db);
+      const worker = work.register(coordinator, () => true);
+      const debug = db.$client.options.debug;
+      const locks: string[] = [];
+      try {
+        await worker.ready;
+        await expect.poll(() => ({ active: idleWorkSnapshot().active, next: coordinator.nextWakeAt() }), { timeout: 10_000 })
+          .toEqual({ active: 0, next: null });
+        db.$client.options.debug = (_connection, query) => {
+          if (query.startsWith("select") && query.includes("for update") && /"(?:issues|heartbeat_runs|native_run_finalizations)"/.test(query)) locks.push(query);
+        };
+        for (let i = 0; i < 3; i++) {
+          await db.transaction(tx => notifyChatRunMilestones(tx, { companyId: context.fixture.companyId, issueId: context.issue.id }));
+          await expect.poll(() => ({ active: idleWorkSnapshot().active, next: coordinator.nextWakeAt() }), { timeout: 5000 })
+            .toEqual({ active: 0, next: null });
+        }
+        expect(locks).toEqual([]);
+        expect(await work.load({ companyId: context.fixture.companyId, issueId: context.issue.id })).toEqual([]);
+        expect(await readChatPublicationsByEndpointId(context.endpoint.id)).toEqual([]);
+        expect(errors).toEqual([]);
+      } finally { db.$client.options.debug = debug; worker.stop(); await coordinator.stop(); }
+    });
+
+  it("leaves fresh-commit accepted-response presentation to the worker when periodic replay skips it", async () => {
+    const context = await committedChatResponseRecoveryFixture("telegram", "coordinator", false, undefined, undefined, false);
+    try {
+      await finalizeNativeRun({ db, runId: context.runId, workspaceFinalizeStatus: "succeeded",
+        projectRunStatus: true, skipNativeResponsePresentation: true });
+      expect(await readChatPublicationsByEndpointId(context.endpoint.id)).toEqual([]);
+      expect(await db.select().from(issueComments).where(eq(issueComments.createdByRunId, context.runId))).toEqual([]);
+      const work = nativeResponsePresentationWork(db);
+      const entries = await work.load({ companyId: context.fixture.companyId, runId: context.runId });
+      expect(entries).toHaveLength(1);
+      await expect(work.check(entries[0])).resolves.toBeNull();
+      expect(await readChatPublicationsByEndpointId(context.endpoint.id)).toHaveLength(1);
+    } finally { await context.service.shutdown(); }
+  });
+
   it.each(["reconciler", "finalizer"])("leaves accepted-response presentation to its worker during periodic %s replay", async caller => {
     const context = await committedChatResponseRecoveryFixture("telegram");
     try {
@@ -75372,6 +75467,59 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
       expect(await readChatPublicationsByEndpointId(context.endpoint.id)).toHaveLength(0);
       expect(errors).toEqual([]);
     } finally { worker.stop(); await coordinator.stop(); }
+  });
+
+  it.each(["milestone", "finalization"] as const)("ignores repeated unscoped routine %s hints without rebuilding dormant accepted-response history", async source => {
+    const context = await committedChatResponseRecoveryFixture("telegram");
+    await context.service.shutdown();
+    const errors: unknown[] = [];
+    const coordinator = createDeliveryWorkCoordinator({ owner: db, canRun: () => true, onError: error => errors.push(error) });
+    const work = nativeResponsePresentationWork(db);
+    const worker = work.register(coordinator, () => true);
+    try {
+      await worker.ready;
+      await expect.poll(() => ({ active: idleWorkSnapshot().active, next: coordinator.nextWakeAt() }), { timeout: 10_000 })
+        .toEqual({ active: 0, next: null });
+      expect(await work.load({ companyId: context.fixture.companyId, runId: context.runId })).toHaveLength(1);
+      const debug = db.$client.options.debug;
+      const queries: string[] = [];
+      db.$client.options.debug = (_connection, query) => {
+        if (query.startsWith("select") && query.includes("native_run_finalizations")) queries.push(query);
+      };
+      try {
+        for (let i = 0; i < 3; i++) {
+          await db.transaction(tx => source === "milestone"
+            ? notifyChatRunMilestones(tx, { companyId: context.fixture.companyId })
+            : notifyNativeFinalizationWork(tx, { companyId: context.fixture.companyId }));
+          await expect.poll(() => ({ active: idleWorkSnapshot().active, next: coordinator.nextWakeAt() }), { timeout: 5000 })
+            .toEqual({ active: 0, next: null });
+        }
+        expect(queries).toEqual([]);
+      } finally { db.$client.options.debug = debug; }
+      expect(await readChatPublicationsByEndpointId(context.endpoint.id)).toHaveLength(0);
+      expect(errors).toEqual([]);
+    } finally { worker.stop(); await coordinator.stop(); }
+  });
+
+  it("wakes dormant accepted-response history from the real company membership restoration owner", async () => {
+    const context = await committedChatResponseRecoveryFixture("telegram");
+    const [membership] = await db.select().from(companyMemberships).where(and(
+      eq(companyMemberships.companyId, context.fixture.companyId), eq(companyMemberships.principalId, "owner-user")));
+    await db.update(companyMemberships).set({ status: "suspended" }).where(eq(companyMemberships.id, membership.id));
+    const errors: unknown[] = [];
+    const coordinator = createDeliveryWorkCoordinator({ owner: db, canRun: () => true, onError: error => errors.push(error) });
+    const worker = nativeResponsePresentationWork(db).register(coordinator, () => true);
+    try {
+      await worker.ready;
+      await expect.poll(() => ({ active: idleWorkSnapshot().active, next: coordinator.nextWakeAt() }), { timeout: 10_000 })
+        .toEqual({ active: 0, next: null });
+      expect(await readChatPublicationsByEndpointId(context.endpoint.id)).toHaveLength(0);
+      await accessService(db).updateMember(context.fixture.companyId, membership.id, { status: "active" });
+      await expect.poll(async () => ({ count: (await readChatPublicationsByEndpointId(context.endpoint.id)).length,
+        active: idleWorkSnapshot().active, next: coordinator.nextWakeAt() }), { timeout: 5000 })
+        .toEqual({ count: 1, active: 0, next: null });
+      expect(errors).toEqual([]);
+    } finally { worker.stop(); await coordinator.stop(); await context.service.shutdown(); }
   });
 
   it.each(["commit", "rollback"])("keeps accepted-response work behind the outer %s boundary", async outcome => {
