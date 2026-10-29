@@ -1224,12 +1224,13 @@ describeEmbeddedPostgres("wake-queue postgres adapter", () => {
       expect(wakeRow?.payload).not.toHaveProperty("foo");
     });
 
-    it("scopes a real coalesced-input response wake to its active run after commit", async () => {
+    it.each([DELIVERY_QUEUES.nativeResponsePresentation, DELIVERY_QUEUES.nativeReviewResponse])(
+      "scopes a real coalesced-input %s response wake to its active run after commit", async queue => {
       const companyId = await seedCompany();
       const agentId = await seedAgent({ companyId });
       const runId = await seedRun({ companyId, agentId, status: "running" });
       const hints: Array<Record<string, unknown>> = [];
-      const unsubscribe = subscribeDatabaseWork(db, DELIVERY_QUEUES.nativeResponsePresentation, (event, values) => {
+      const unsubscribe = subscribeDatabaseWork(db, queue, (event, values) => {
         if (event === "settled") for (const value of values ?? []) hints.push(JSON.parse(value));
       });
       try {
