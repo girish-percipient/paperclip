@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import { appendFile, cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { sealManualResultEvidence } from "./manual-private-handoff.js";
+import { normalizedSecrets } from "./redaction.js";
+import { CREDENTIAL_NAMES } from "./types.js";
 import { isStandardEvidenceFile } from "./evidence.js";
 import { BoundedHistoryPublisher } from "./history-budget.js";
 import { privateArtifactKey, retainPrivateTransfer, transferPrivateArtifact, verifyPrivateHistory, type PrivateEvidenceCompleteness } from "./private-history.js";
@@ -31,7 +34,7 @@ async function prepare(env: NodeJS.ProcessEnv) {
   }
   const temporary = await realpath(env.RUNNER_TEMP ?? ""), root = await mkdtemp(path.join(temporary, "manual-private-evidence-"));
   await writeFile(path.join(root, "identity.json"), JSON.stringify({ ...approval, executionIds: [id], root, status: "pending" }), { mode: 0o600, flag: "wx" });
-  await output("root", root); await output("session_policy", JSON.stringify(manualPrivateSessionPolicy({ bucket, runId: approval.runId, executionIds: [id], report: false })));
+  await output("root", root); await output("session_policy", JSON.stringify(manualPrivateSessionPolicy({ bucket, runId: approval.runId, executionIds: [id], mode: "cell-write" })));
 }
 function requireSession(env: NodeJS.ProcessEnv) {
   if (![env.AWS_ACCESS_KEY_ID, env.AWS_SECRET_ACCESS_KEY, env.AWS_SESSION_TOKEN].every(value => typeof value === "string" && value.length > 0))
@@ -111,14 +114,20 @@ async function uploadCell(env: NodeJS.ProcessEnv) {
     () => new BoundedHistoryPublisher(`${receipt}.retention.json`));
 }
 async function reportSession(env: NodeJS.ProcessEnv) {
-  const { ids, approval, bucket } = request(env);
-  await output("session_policy", JSON.stringify(manualPrivateSessionPolicy({ bucket, runId: approval.runId, executionIds: ids, report: true })));
+  const { approval, bucket } = request(env);
+  await output("session_policy", JSON.stringify(manualPrivateSessionPolicy({ bucket, runId: approval.runId, executionIds: [...approval.executionIds], mode: "report-write" })));
+  await output("cell_count", String(approval.executionIds.length));
+  for (const [index, id] of approval.executionIds.entries()) {
+    await output(`read_policy_${index}`, JSON.stringify(manualPrivateSessionPolicy({ bucket, runId: approval.runId, executionIds: [id], mode: "cell-read" })));
+  }
 }
-async function downloadCells(env: NodeJS.ProcessEnv) {
+async function downloadCell(env: NodeJS.ProcessEnv) {
   requireSession(env); const { approval, bucket } = request(env), root = await realpath(env.PRIVATE_REPORT_ROOT ?? "");
-  const selected = path.join(root, "selected-runner-e2e"); await mkdir(selected, { mode: 0o700 });
-  const cells: PrivateEvidenceCompleteness["cells"] = [];
-  for (const id of approval.executionIds) {
+  const index = Number(env.SELECTED_CELL_INDEX);
+  if (!/^[0-7]$/.test(env.SELECTED_CELL_INDEX ?? "") || !approval.executionIds[index]) throw new Error("Invalid exact private cell index");
+  const selected = path.join(root, "selected-runner-e2e"); await mkdir(selected, { recursive: true, mode: 0o700 });
+  const id = approval.executionIds[index]!;
+  {
     const directory = path.join(root, manualCellKind(id)), publisher = new BoundedHistoryPublisher(path.join(root, `${manualCellKind(id)}-download.json`));
     const receipt = await publisher.downloadJson<{ evidenceCompleteness?: PrivateEvidenceCompleteness; transfer?: { status?: string; sha256?: string } }>(bucket,
       `${privateArtifactKey(manualCellKind(id), approval.runId)}.upload-receipt.json`, path.join(root, `${manualCellKind(id)}-receipt.json`));
@@ -131,20 +140,35 @@ async function downloadCells(env: NodeJS.ProcessEnv) {
     const originals = await validateSealedOriginals(directory, id), summary = cellCompleteness(id, originals);
     if (hash(JSON.stringify(identity.evidenceCompleteness)) !== hash(JSON.stringify(summary))
       || hash(JSON.stringify(receipt.evidenceCompleteness)) !== hash(JSON.stringify(summary))) throw new Error("Private evidence completeness receipt differs from archive");
-    cells.push(...summary.cells);
     await validateSealedInventory(path.join(directory, "sealed-results", "html-report"), "../result-evidence-inventory.json");
     await cp(path.join(directory, "sealed-results", "html-report"), path.join(selected, manualCellKind(id)), { recursive: true, errorOnExist: true, force: false });
+    await writeFile(path.join(root, `manual-cell-completeness-${index}.json`), JSON.stringify(summary), { mode: 0o600, flag: "wx" });
+  }
+}
+async function verifyDownloads(env: NodeJS.ProcessEnv) {
+  const { approval } = request(env), root = await realpath(env.PRIVATE_REPORT_ROOT ?? "");
+  const cells: PrivateEvidenceCompleteness["cells"] = [];
+  for (const [index, id] of approval.executionIds.entries()) {
+    const summary = JSON.parse(await readFile(path.join(root, `manual-cell-completeness-${index}.json`), "utf8")) as PrivateEvidenceCompleteness;
+    if (summary.meaning !== "available-files-and-transfer-only" || summary.doesNotAttestFeatureOutcome !== true
+      || summary.cells.length !== 1 || summary.cells[0]!.executionId !== id) throw new Error("Private report lacks an exact cell transfer");
+    cells.push(...summary.cells);
   }
   await writeFile(path.join(root, "manual-report-input-completeness.json"), JSON.stringify({ meaning: "available-files-and-transfer-only", doesNotAttestFeatureOutcome: true, cells }), { mode: 0o600, flag: "wx" });
 }
-async function uploadReport(env: NodeJS.ProcessEnv) {
+export async function uploadReport(env: NodeJS.ProcessEnv) {
   requireSession(env); const { approval, bucket } = request(env), source = await realpath(env.PRIVATE_REPORT_SOURCE ?? ""), root = await realpath(env.PRIVATE_REPORT_ROOT ?? "");
   if (!source.startsWith(`${root}${path.sep}`)) throw new Error("Private report escaped owned staging");
   const evidenceCompleteness = JSON.parse(await readFile(path.join(root, "manual-report-input-completeness.json"), "utf8")) as PrivateEvidenceCompleteness;
   if (evidenceCompleteness.meaning !== "available-files-and-transfer-only" || evidenceCompleteness.doesNotAttestFeatureOutcome !== true
     || evidenceCompleteness.cells.map(cell => cell.executionId).sort().join() !== [...approval.executionIds].sort().join()) throw new Error("Private report lacks exact cell completeness receipts");
+  const secrets = normalizedSecrets([...CREDENTIAL_NAMES.map(name => env[name]), env.AWS_ACCESS_KEY_ID, env.AWS_SECRET_ACCESS_KEY, env.AWS_SESSION_TOKEN]);
+  await sealManualResultEvidence({ root, protocol: MANUAL_PRIVATE_PROTOCOL, private: true, workflowSha: approval.workflowSha,
+    targetSha: approval.targetSha, runId: approval.runId, attempt: approval.attempt, executionIds: [...approval.executionIds] }, secrets, source);
+  const sealed = path.join(root, "sealed-results");
+  await validateSealedInventory(path.join(sealed, "html-report"), "../result-evidence-inventory.json");
   const receipt = path.join(root, "report-transfer.json"), publisher = new BoundedHistoryPublisher(receipt);
-  await retainPrivateTransfer({ operation: "upload", kind: "manual-report", runId: approval.runId, directory: source, bucket, publisher, evidenceCompleteness }, receipt,
+  await retainPrivateTransfer({ operation: "upload", kind: "manual-report", runId: approval.runId, directory: sealed, bucket, publisher, evidenceCompleteness }, receipt,
     () => new BoundedHistoryPublisher(`${receipt}.retention.json`));
 }
 async function main() {
@@ -154,7 +178,8 @@ async function main() {
   else if (action === "verify") await verify(process.env);
   else if (action === "upload-cell") await uploadCell(process.env);
   else if (action === "report-session") await reportSession(process.env);
-  else if (action === "download-cells") await downloadCells(process.env);
+  else if (action === "download-cell") await downloadCell(process.env);
+  else if (action === "verify-downloads") await verifyDownloads(process.env);
   else if (action === "upload-report") await uploadReport(process.env);
   else throw new Error("Invalid private evidence command");
 }

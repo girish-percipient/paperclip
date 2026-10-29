@@ -1471,9 +1471,21 @@ jobs:
           disable-retry: true
           action-timeout-s: 60
 
-      - name: Download complete current manual evidence from restricted storage
-        id: manual_cells_downloaded
-        if: steps.manual_report.outcome == 'success'
+      - name: Obtain exact private cell 0 read session
+        id: manual_read_credentials_0
+        if: steps.manual_report.outcome == 'success' && fromJSON(steps.manual_report.outputs.cell_count) > 0
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          role-to-assume: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+          inline-session-policy: ${{ steps.manual_report.outputs.read_policy_0 }}
+          output-env-credentials: false
+          output-credentials: true
+          disable-retry: true
+          action-timeout-s: 60
+
+      - name: Download restricted manual cell 0
+        if: steps.manual_read_credentials_0.outcome == 'success'
         env:
           MANUAL_PRIVATE_IDS: ${{ needs.authorize.outputs.manual_private_ids }}
           MANUAL_PRIVATE_APPROVALS_JSON: ${{ vars.RUNNER_E2E_MANUAL_PRIVATE_APPROVALS_JSON }}
@@ -1483,11 +1495,241 @@ jobs:
           NODE_PATH: ''
           AWS_EC2_METADATA_DISABLED: 'true'
           PRIVATE_REPORT_ROOT: ${{ github.workspace }}
-          AWS_ACCESS_KEY_ID: ${{ steps.manual_report_credentials.outputs.aws-access-key-id }}
-          AWS_SECRET_ACCESS_KEY: ${{ steps.manual_report_credentials.outputs.aws-secret-access-key }}
-          AWS_SESSION_TOKEN: ${{ steps.manual_report_credentials.outputs.aws-session-token }}
+          SELECTED_CELL_INDEX: '0'
+          AWS_ACCESS_KEY_ID: ${{ steps.manual_read_credentials_0.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.manual_read_credentials_0.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.manual_read_credentials_0.outputs.aws-session-token }}
           AWS_DEFAULT_REGION: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
-        run: node "$GITHUB_WORKSPACE/cli/node_modules/tsx/dist/cli.mjs" "$GITHUB_WORKSPACE/tests/runner-e2e/manual-private-transfer.ts" download-cells
+        run: node "$GITHUB_WORKSPACE/cli/node_modules/tsx/dist/cli.mjs" "$GITHUB_WORKSPACE/tests/runner-e2e/manual-private-transfer.ts" download-cell
+
+      - name: Obtain exact private cell 1 read session
+        id: manual_read_credentials_1
+        if: steps.manual_report.outcome == 'success' && fromJSON(steps.manual_report.outputs.cell_count) > 1
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          role-to-assume: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+          inline-session-policy: ${{ steps.manual_report.outputs.read_policy_1 }}
+          output-env-credentials: false
+          output-credentials: true
+          disable-retry: true
+          action-timeout-s: 60
+
+      - name: Download restricted manual cell 1
+        if: steps.manual_read_credentials_1.outcome == 'success'
+        env:
+          MANUAL_PRIVATE_IDS: ${{ needs.authorize.outputs.manual_private_ids }}
+          MANUAL_PRIVATE_APPROVALS_JSON: ${{ vars.RUNNER_E2E_MANUAL_PRIVATE_APPROVALS_JSON }}
+          TARGET_SHA: ${{ needs.authorize.outputs.target_sha }}
+          RUNNER_E2E_PRIVATE_HISTORY_S3_BUCKET: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_S3_BUCKET }}
+          NODE_OPTIONS: ''
+          NODE_PATH: ''
+          AWS_EC2_METADATA_DISABLED: 'true'
+          PRIVATE_REPORT_ROOT: ${{ github.workspace }}
+          SELECTED_CELL_INDEX: '1'
+          AWS_ACCESS_KEY_ID: ${{ steps.manual_read_credentials_1.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.manual_read_credentials_1.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.manual_read_credentials_1.outputs.aws-session-token }}
+          AWS_DEFAULT_REGION: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+        run: node "$GITHUB_WORKSPACE/cli/node_modules/tsx/dist/cli.mjs" "$GITHUB_WORKSPACE/tests/runner-e2e/manual-private-transfer.ts" download-cell
+
+      - name: Obtain exact private cell 2 read session
+        id: manual_read_credentials_2
+        if: steps.manual_report.outcome == 'success' && fromJSON(steps.manual_report.outputs.cell_count) > 2
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          role-to-assume: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+          inline-session-policy: ${{ steps.manual_report.outputs.read_policy_2 }}
+          output-env-credentials: false
+          output-credentials: true
+          disable-retry: true
+          action-timeout-s: 60
+
+      - name: Download restricted manual cell 2
+        if: steps.manual_read_credentials_2.outcome == 'success'
+        env:
+          MANUAL_PRIVATE_IDS: ${{ needs.authorize.outputs.manual_private_ids }}
+          MANUAL_PRIVATE_APPROVALS_JSON: ${{ vars.RUNNER_E2E_MANUAL_PRIVATE_APPROVALS_JSON }}
+          TARGET_SHA: ${{ needs.authorize.outputs.target_sha }}
+          RUNNER_E2E_PRIVATE_HISTORY_S3_BUCKET: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_S3_BUCKET }}
+          NODE_OPTIONS: ''
+          NODE_PATH: ''
+          AWS_EC2_METADATA_DISABLED: 'true'
+          PRIVATE_REPORT_ROOT: ${{ github.workspace }}
+          SELECTED_CELL_INDEX: '2'
+          AWS_ACCESS_KEY_ID: ${{ steps.manual_read_credentials_2.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.manual_read_credentials_2.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.manual_read_credentials_2.outputs.aws-session-token }}
+          AWS_DEFAULT_REGION: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+        run: node "$GITHUB_WORKSPACE/cli/node_modules/tsx/dist/cli.mjs" "$GITHUB_WORKSPACE/tests/runner-e2e/manual-private-transfer.ts" download-cell
+
+      - name: Obtain exact private cell 3 read session
+        id: manual_read_credentials_3
+        if: steps.manual_report.outcome == 'success' && fromJSON(steps.manual_report.outputs.cell_count) > 3
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          role-to-assume: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+          inline-session-policy: ${{ steps.manual_report.outputs.read_policy_3 }}
+          output-env-credentials: false
+          output-credentials: true
+          disable-retry: true
+          action-timeout-s: 60
+
+      - name: Download restricted manual cell 3
+        if: steps.manual_read_credentials_3.outcome == 'success'
+        env:
+          MANUAL_PRIVATE_IDS: ${{ needs.authorize.outputs.manual_private_ids }}
+          MANUAL_PRIVATE_APPROVALS_JSON: ${{ vars.RUNNER_E2E_MANUAL_PRIVATE_APPROVALS_JSON }}
+          TARGET_SHA: ${{ needs.authorize.outputs.target_sha }}
+          RUNNER_E2E_PRIVATE_HISTORY_S3_BUCKET: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_S3_BUCKET }}
+          NODE_OPTIONS: ''
+          NODE_PATH: ''
+          AWS_EC2_METADATA_DISABLED: 'true'
+          PRIVATE_REPORT_ROOT: ${{ github.workspace }}
+          SELECTED_CELL_INDEX: '3'
+          AWS_ACCESS_KEY_ID: ${{ steps.manual_read_credentials_3.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.manual_read_credentials_3.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.manual_read_credentials_3.outputs.aws-session-token }}
+          AWS_DEFAULT_REGION: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+        run: node "$GITHUB_WORKSPACE/cli/node_modules/tsx/dist/cli.mjs" "$GITHUB_WORKSPACE/tests/runner-e2e/manual-private-transfer.ts" download-cell
+
+      - name: Obtain exact private cell 4 read session
+        id: manual_read_credentials_4
+        if: steps.manual_report.outcome == 'success' && fromJSON(steps.manual_report.outputs.cell_count) > 4
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          role-to-assume: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+          inline-session-policy: ${{ steps.manual_report.outputs.read_policy_4 }}
+          output-env-credentials: false
+          output-credentials: true
+          disable-retry: true
+          action-timeout-s: 60
+
+      - name: Download restricted manual cell 4
+        if: steps.manual_read_credentials_4.outcome == 'success'
+        env:
+          MANUAL_PRIVATE_IDS: ${{ needs.authorize.outputs.manual_private_ids }}
+          MANUAL_PRIVATE_APPROVALS_JSON: ${{ vars.RUNNER_E2E_MANUAL_PRIVATE_APPROVALS_JSON }}
+          TARGET_SHA: ${{ needs.authorize.outputs.target_sha }}
+          RUNNER_E2E_PRIVATE_HISTORY_S3_BUCKET: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_S3_BUCKET }}
+          NODE_OPTIONS: ''
+          NODE_PATH: ''
+          AWS_EC2_METADATA_DISABLED: 'true'
+          PRIVATE_REPORT_ROOT: ${{ github.workspace }}
+          SELECTED_CELL_INDEX: '4'
+          AWS_ACCESS_KEY_ID: ${{ steps.manual_read_credentials_4.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.manual_read_credentials_4.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.manual_read_credentials_4.outputs.aws-session-token }}
+          AWS_DEFAULT_REGION: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+        run: node "$GITHUB_WORKSPACE/cli/node_modules/tsx/dist/cli.mjs" "$GITHUB_WORKSPACE/tests/runner-e2e/manual-private-transfer.ts" download-cell
+
+      - name: Obtain exact private cell 5 read session
+        id: manual_read_credentials_5
+        if: steps.manual_report.outcome == 'success' && fromJSON(steps.manual_report.outputs.cell_count) > 5
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          role-to-assume: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+          inline-session-policy: ${{ steps.manual_report.outputs.read_policy_5 }}
+          output-env-credentials: false
+          output-credentials: true
+          disable-retry: true
+          action-timeout-s: 60
+
+      - name: Download restricted manual cell 5
+        if: steps.manual_read_credentials_5.outcome == 'success'
+        env:
+          MANUAL_PRIVATE_IDS: ${{ needs.authorize.outputs.manual_private_ids }}
+          MANUAL_PRIVATE_APPROVALS_JSON: ${{ vars.RUNNER_E2E_MANUAL_PRIVATE_APPROVALS_JSON }}
+          TARGET_SHA: ${{ needs.authorize.outputs.target_sha }}
+          RUNNER_E2E_PRIVATE_HISTORY_S3_BUCKET: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_S3_BUCKET }}
+          NODE_OPTIONS: ''
+          NODE_PATH: ''
+          AWS_EC2_METADATA_DISABLED: 'true'
+          PRIVATE_REPORT_ROOT: ${{ github.workspace }}
+          SELECTED_CELL_INDEX: '5'
+          AWS_ACCESS_KEY_ID: ${{ steps.manual_read_credentials_5.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.manual_read_credentials_5.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.manual_read_credentials_5.outputs.aws-session-token }}
+          AWS_DEFAULT_REGION: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+        run: node "$GITHUB_WORKSPACE/cli/node_modules/tsx/dist/cli.mjs" "$GITHUB_WORKSPACE/tests/runner-e2e/manual-private-transfer.ts" download-cell
+
+      - name: Obtain exact private cell 6 read session
+        id: manual_read_credentials_6
+        if: steps.manual_report.outcome == 'success' && fromJSON(steps.manual_report.outputs.cell_count) > 6
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          role-to-assume: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+          inline-session-policy: ${{ steps.manual_report.outputs.read_policy_6 }}
+          output-env-credentials: false
+          output-credentials: true
+          disable-retry: true
+          action-timeout-s: 60
+
+      - name: Download restricted manual cell 6
+        if: steps.manual_read_credentials_6.outcome == 'success'
+        env:
+          MANUAL_PRIVATE_IDS: ${{ needs.authorize.outputs.manual_private_ids }}
+          MANUAL_PRIVATE_APPROVALS_JSON: ${{ vars.RUNNER_E2E_MANUAL_PRIVATE_APPROVALS_JSON }}
+          TARGET_SHA: ${{ needs.authorize.outputs.target_sha }}
+          RUNNER_E2E_PRIVATE_HISTORY_S3_BUCKET: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_S3_BUCKET }}
+          NODE_OPTIONS: ''
+          NODE_PATH: ''
+          AWS_EC2_METADATA_DISABLED: 'true'
+          PRIVATE_REPORT_ROOT: ${{ github.workspace }}
+          SELECTED_CELL_INDEX: '6'
+          AWS_ACCESS_KEY_ID: ${{ steps.manual_read_credentials_6.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.manual_read_credentials_6.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.manual_read_credentials_6.outputs.aws-session-token }}
+          AWS_DEFAULT_REGION: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+        run: node "$GITHUB_WORKSPACE/cli/node_modules/tsx/dist/cli.mjs" "$GITHUB_WORKSPACE/tests/runner-e2e/manual-private-transfer.ts" download-cell
+
+      - name: Obtain exact private cell 7 read session
+        id: manual_read_credentials_7
+        if: steps.manual_report.outcome == 'success' && fromJSON(steps.manual_report.outputs.cell_count) > 7
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          role-to-assume: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+          inline-session-policy: ${{ steps.manual_report.outputs.read_policy_7 }}
+          output-env-credentials: false
+          output-credentials: true
+          disable-retry: true
+          action-timeout-s: 60
+
+      - name: Download restricted manual cell 7
+        if: steps.manual_read_credentials_7.outcome == 'success'
+        env:
+          MANUAL_PRIVATE_IDS: ${{ needs.authorize.outputs.manual_private_ids }}
+          MANUAL_PRIVATE_APPROVALS_JSON: ${{ vars.RUNNER_E2E_MANUAL_PRIVATE_APPROVALS_JSON }}
+          TARGET_SHA: ${{ needs.authorize.outputs.target_sha }}
+          RUNNER_E2E_PRIVATE_HISTORY_S3_BUCKET: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_S3_BUCKET }}
+          NODE_OPTIONS: ''
+          NODE_PATH: ''
+          AWS_EC2_METADATA_DISABLED: 'true'
+          PRIVATE_REPORT_ROOT: ${{ github.workspace }}
+          SELECTED_CELL_INDEX: '7'
+          AWS_ACCESS_KEY_ID: ${{ steps.manual_read_credentials_7.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.manual_read_credentials_7.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.manual_read_credentials_7.outputs.aws-session-token }}
+          AWS_DEFAULT_REGION: ${{ vars.RUNNER_E2E_PRIVATE_HISTORY_AWS_REGION }}
+        run: node "$GITHUB_WORKSPACE/cli/node_modules/tsx/dist/cli.mjs" "$GITHUB_WORKSPACE/tests/runner-e2e/manual-private-transfer.ts" download-cell
+
+      - name: Verify all approved private cell transfers before merging
+        id: manual_cells_downloaded
+        if: steps.manual_report.outcome == 'success'
+        env:
+          MANUAL_PRIVATE_IDS: ${{ needs.authorize.outputs.manual_private_ids }}
+          MANUAL_PRIVATE_APPROVALS_JSON: ${{ vars.RUNNER_E2E_MANUAL_PRIVATE_APPROVALS_JSON }}
+          TARGET_SHA: ${{ needs.authorize.outputs.target_sha }}
+          PRIVATE_REPORT_ROOT: ${{ github.workspace }}
+          NODE_OPTIONS: ''
+          NODE_PATH: ''
+        run: node "$GITHUB_WORKSPACE/cli/node_modules/tsx/dist/cli.mjs" "$GITHUB_WORKSPACE/tests/runner-e2e/manual-private-transfer.ts" verify-downloads
 
       - name: Resolve workflow job attempts
         env:

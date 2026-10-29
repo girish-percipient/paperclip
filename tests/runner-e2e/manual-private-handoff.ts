@@ -116,8 +116,10 @@ export async function sealStandardOriginalEvidence(input: {
   } catch (error) { await rm(out, { recursive: true, force: true }); throw error; }
 }
 
-export async function sealManualResultEvidence(context: ManualPrivateHandoff, secrets: readonly string[]) {
-  const root = path.join(context.root, "results"), wrapper = path.join(context.root, "result-validation");
+export async function sealManualResultEvidence(context: ManualPrivateHandoff, secrets: readonly string[], source = path.join(context.root, "results")) {
+  const root = await realpath(source), owned = await realpath(context.root);
+  if (!root.startsWith(`${owned}${path.sep}`)) throw new Error("Packaged evidence escaped its owned root");
+  const wrapper = path.join(context.root, "result-validation");
   const { cp, rename } = await import("node:fs/promises");
   await mkdir(wrapper, { mode: 0o700 });
   const records: Array<{ path: string; bytes: number; sha256: string }> = [];

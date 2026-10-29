@@ -47,3 +47,16 @@ it("requires downloaded complete private cell receipts before retaining merged r
  expect(step("report","Aggregate normalized campaign results").run).toContain('"$EVIDENCE_RETENTION" = private');
  expect(step("report","Merge Playwright HTML and JUnit").run).toContain('> runner-e2e-merged-report/merge.log 2>&1');
 });
+
+it("uses one exact read session per approved cell and a distinct write-only report session",()=>{
+ const report=jobs.report.steps;
+ for(let index=0;index<8;index++){
+  const credentials=report.find((row:any)=>row.id===`manual_read_credentials_${index}`);
+  expect(credentials.with["inline-session-policy"]).toBe("${{ steps.manual_report.outputs.read_policy_"+index+" }}");
+  expect(credentials.if).toContain(`cell_count) > ${index}`);
+  const read=step("report",`Download restricted manual cell ${index}`);
+  expect(read.env.SELECTED_CELL_INDEX).toBe(String(index));expect(read.env.AWS_ACCESS_KEY_ID).toBe("${{ steps.manual_read_credentials_"+index+".outputs.aws-access-key-id }}");
+ }
+ expect(step("report","Obtain exact current manual report archive session").with["inline-session-policy"]).toBe("${{ steps.manual_report.outputs.session_policy }}");
+ expect(step("report","Verify all approved private cell transfers before merging").run).toContain("verify-downloads");
+});

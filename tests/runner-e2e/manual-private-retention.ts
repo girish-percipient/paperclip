@@ -49,15 +49,19 @@ export function manualCellKind(id: string) {
   if (!execution.test(id)) throw new Error("Invalid manual evidence execution identity");
   return `manual-cell-${createHash("sha256").update(id).digest("hex")}`;
 }
-export function manualPrivateSessionPolicy(input: { bucket: string; runId: string; executionIds: string[]; report: boolean }) {
+export function manualPrivateSessionPolicy(input: { bucket: string; runId: string; executionIds: string[]; mode: "cell-write" | "cell-read" | "report-write" }) {
   if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(input.bucket) || !/^[1-9][0-9]{0,19}$/.test(input.runId))
     throw new Error("Invalid manual private storage identity");
   const ids = canonicalManualIds(input.executionIds);
+  if (ids.some(id => !MANUAL_PRIVATE_EXECUTIONS.includes(id)) || input.mode !== "report-write" && ids.length !== 1)
+    throw new Error("Private archive sessions require one exact cell or the report writer");
   const prefix = `arn:aws:s3:::${input.bucket}/runner-e2e-private/bounded-v1/campaigns/gha-${input.runId}-1/`;
   const cells = ids.map(id => `${prefix}${manualCellKind(id)}.zip`);
-  return { Version: "2012-10-17", Statement: [
+  const policy = { Version: "2012-10-17", Statement: [
     { Effect: "Allow", Action: ["s3:GetBucketVersioning", "s3:GetLifecycleConfiguration", "s3:GetBucketObjectLockConfiguration", "s3:GetReplicationConfiguration", "s3:GetBucketPublicAccessBlock", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy"], Resource: `arn:aws:s3:::${input.bucket}` },
-    ...(input.report ? [{ Effect: "Allow", Action: ["s3:GetObject"], Resource: cells.flatMap(key => [key, `${key}.upload-receipt.json`]) }] : []),
-    { Effect: "Allow", Action: ["s3:PutObject"], Resource: (input.report ? [`${prefix}manual-report.zip`] : cells).flatMap(key => [key, `${key}.upload-receipt.json`]) },
+    ...(input.mode === "cell-read" ? [{ Effect: "Allow", Action: ["s3:GetObject"], Resource: cells.flatMap(key => [key, `${key}.upload-receipt.json`]) }] : []),
+    ...(input.mode === "cell-read" ? [] : [{ Effect: "Allow", Action: ["s3:PutObject"], Resource: (input.mode === "report-write" ? [`${prefix}manual-report.zip`] : cells).flatMap(key => [key, `${key}.upload-receipt.json`]) }]),
   ] };
+  if (JSON.stringify(policy).length > 2048) throw new Error("Private archive session policy exceeds the STS limit");
+  return policy;
 }

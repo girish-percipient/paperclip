@@ -90,7 +90,10 @@ The AWS action returns session credentials as step outputs, not job-wide
 environment exports. Only trusted preflight and transfer steps receive those
 outputs. Transfers require an explicit complete session and disable EC2 metadata
 fallback. A failed or expired session fails retention. It never enables an
-Actions upload. Exact-key session policies limit the intended transfer calls.
+Actions upload. Exact-key session policies limit the intended transfer calls. Each current cell
+uses its own two-object read session; the report writer uses a separate session.
+Every generated policy is checked against the 2,048-character STS limit before
+the credential action. No wildcard object access is added.
 
 This is **operator-approved target execution**, not a sandbox for malicious
 source. The protected job has OIDC permission. Its target launcher can inherit
@@ -132,8 +135,11 @@ not have complete retained evidence and needs an explicit disposition.
 Private objects use immutable conditional puts and version receipts under
 `runner-e2e-private/bounded-v1/campaigns/gha-RUN_ID-1/`. Each cell has a hash-derived
 object name. The report reads only the approved current cells and verifies each
-archive against its retained transfer digest. It retains merged HTML, blob and
-normalized output in the same restricted store. A report error stays a report
+archive against its retained transfer digest. Fresh merged HTML, blob, normalized output and report logs receive a final
+standard-file scan and sealed inventory with the actual current report-step
+credential roots, including its explicit AWS session. The report uses the same
+raw, encoded-root and provider-shape checks before transfer. It retains the
+scanned report in the same restricted store. A report error stays a report
 error; retention does not change its grade or manufacture a public page.
 
 Authenticated retrieval uses the existing private-history operator machinery
