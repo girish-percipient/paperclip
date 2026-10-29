@@ -598,3 +598,68 @@ fixture in 7.62 seconds; 178 other workspace cases are outside that focused
 selection. Its embedded-only fixture import restores byte for byte. Combined
 server types/build, boundaries and migration order pass again. The independent
 browser fixture changes are preserved exactly; no local browser run is claimed.
+
+### Recorded presentation and structural eligibility repair
+
+The exact published head `ae75e21bd5aa5841b66f0d3f421181cdcfa9a3be`
+received Greptile 5/5, a clean security scan, and passing CI. Its completed
+Ponytail 4/5 verdict nevertheless required two correctness fixes. That actual
+failing verdict was honored; no review timeout or numeric score waived it.
+The review also found a missing fresh-commit skip guard, which is repaired here.
+
+A recorded non-create presentation decision (`none`, `reuse`, or another explicit
+non-create value) now excludes both discovery and locked recovery. A string
+selected comment ID still fences recovery, including deleted comments. The
+`skipIssueComment` policy applies to all recovery branches. Missing legacy
+presentation metadata and explicit `create` with a null comment ID remain owed
+work and can recover once. No per-worker table or transaction wrapper is added.
+
+Discovery joins the owning company/issue and applies the cheap durable guards
+before taking recovery locks: done results belong to succeeded non-conversation
+runs; response waits have empty attention requests and usable summary/key;
+monitor and same-agent continuations require succeeded runs and their accepted
+reason codes. Digest integrity, current publication authority, provider-owned
+interactions, final-message selection and other owner checks remain under the
+existing transaction. These predicates narrow structural candidates; they do not
+claim to establish authorization or replace late-evidence and authority-change
+notifications. Fresh finalization now honors `skipNativeResponsePresentation`
+as the already-committed path does.
+
+The final corrected regression source is unchanged between the red and green
+runs. The published baseline fails eight behavioral assertions and passes the
+three positive genuine-answer cases. Repair source
+`892f36e5f66ba1af123034936a7160c64c3ab883` passes all eleven. Recorded none/reuse
+produce no new comments or publications and keep their decision. Five families
+of structurally ineligible retained rows produce zero issue/run/finalization
+`FOR UPDATE` queries across three issue-scoped notifications each. Those selector
+fixtures deliberately vary durable payload fields; integrity and authorization
+remain separate recovery requirements. Genuine missing, legacy and create-null
+presentations still publish once. A genuinely uncommitted accepted run proves
+that periodic finalization leaves presentation to the worker.
+
+Earlier material failures remain in the verification record: an incomplete
+conversation identity fixture, a duplicate variable declaration, a remaining
+stale variable reference and its downstream retry contamination, a test that
+accidentally used the matching continuation reason, and a missing fixture import.
+The fixture was corrected to exercise the actual incompatible reason; assertions
+and time limits were not weakened. The final red comparison restores the exact
+published production files temporarily and verifies byte-exact restoration of
+the repair afterward. These were explained local setup/implementation failures,
+not inferred infrastructure faults.
+
+Repair source passes **1489 distinct cases**: 1139 across six complete consumer
+suites in 81.02 seconds, plus 350 selected chat integration cases in 297.68s.
+The remaining 1463 chat cases are outside the name pattern; the full 1813-case
+file is not claimed for this repair. The eleven new regressions are included
+in the selected count, not added again. The six complete files cover 968 native
+session cases, 79 response-summary cases, 21 monitor-continuation cases, 29 native
+finalizer cases, 32 finalization-recovery cases and 10 workspace-sync cases.
+
+No executable migration, schema, prior history, index/statistics statement or
+snapshot changes in this repair. Five fresh PostgreSQL 17 fixtures migrate
+through 0412; no embedded fixture adaptation is needed for these suites. All
+selected test hashes match the captured source. Database build, server
+types/build, module boundaries and full-SHA migration ordering pass. Actual host
+sleep, external wake and fleet cost savings remain unqualified. A newly published
+head still requires fresh exact-head Greptile 5/5, passing CI and no actionable
+review findings before merge.
