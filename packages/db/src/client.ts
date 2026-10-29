@@ -562,6 +562,7 @@ const MIGRATIONS_WITH_TOP_LEVEL_STATEMENTS = new Set([
   "0410_freezing_kinsey_walden.sql",
   "0411_real_scrambler.sql",
   "0412_tearful_squadron_supreme.sql",
+  "0413_tired_kronos.sql",
 
 
   "0384_funny_adam_warlock.sql",

@@ -2951,8 +2951,8 @@ describe("native external-chat response wait", () => {
               and ${backend.pid} = any(pg_blocking_pids(pid))`);
           expect(waiting.count).toBe(1);
         });
-        // The real status committer takes coordinator -> issue. Recovery must
-        // not hold the issue while waiting for this already-owned coordinator.
+
+
         await tx.execute(sql`set local lock_timeout = '500ms'`);
         const replay = await commitNativeStatusDecision({
           db: tx as unknown as typeof db, companyId: fixture.companyId,
@@ -3083,8 +3083,8 @@ describe("native external-chat response wait", () => {
       const [backend] = await tx.execute(sql`select pg_backend_pid() as pid`);
       holderPid = Number(backend.pid);
       if (first === "resolver") {
-        // Let resolution discover links, then stop its UPDATE. FK checks and
-        // SELECT FOR UPDATE remain allowed by this table lock.
+
+
         await tx.execute(sql`lock table approvals in share mode`);
       } else {
         await link(tx as unknown as typeof db);
@@ -3114,8 +3114,8 @@ describe("native external-chat response wait", () => {
         }).then(() => { linked = true; });
         await expect.poll(async () => linked || await blocked(linkerPid, resolverPid), { timeout: 5000 }).toBe(true);
       }
-      // Finish observing any early link wake while approval is still pending;
-      // the assertion below requires another wake that can see its decision.
+
+
       await Promise.all(reads);
       release();
       await Promise.all([holder, resolver, linker]);

@@ -12,9 +12,9 @@ export async function notifyApprovalWork(transaction: object, companyId: string,
   await notifyApprovalQueueWork(transaction, companyId);
   const issueIds = new Set(scope?.issueIds);
   if (scope?.approvalId) {
-    // Link inserts hold a foreign-key KEY SHARE lock on this approval. Taking
-    // UPDATE before discovering links makes either this transaction see the
-    // committed link, or the link's own wake see the committed decision.
+
+
+
     await (transaction as Db).select({ id: approvals.id }).from(approvals)
       .where(and(eq(approvals.companyId, companyId), eq(approvals.id, scope.approvalId))).for("update");
     const links = await (transaction as Db).select({ issueId: issueApprovals.issueId }).from(issueApprovals)
