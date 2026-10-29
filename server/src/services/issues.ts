@@ -2532,8 +2532,8 @@ async function listPendingFinalizeBlockerIssueIds(
   );
 
   if (lockSources) {
-    // Fence new operations, including ones without an issue attribution, through
-    // their workspace FK. Existing operation changes are locked below.
+
+
     await dbOrTx.select({ id: executionWorkspaces.id }).from(executionWorkspaces)
       .where(and(eq(executionWorkspaces.companyId, companyId), inArray(executionWorkspaces.id, executionWorkspaceIds)))
       .for("update", { noWait: true });
@@ -2734,8 +2734,8 @@ async function listIssueDependencyReadinessMap(
       ),
     );
 
-  // Callers opting into locks already hold the dependent issue FOR UPDATE,
-  // which fences new relation FKs. NOWAIT avoids reversing graph-writer order.
+
+
   const blockerRows = await (lockSources ? blockerQuery.for("update", { noWait: true }) : blockerQuery);
 
   // Collect issue/workspace pairs of "done" blockers — these are the only ones
@@ -9330,8 +9330,8 @@ export function issueService(db: Db) {
       };
     },
 
-    // lockSources requires a transaction holding the dependent issue FOR UPDATE.
-    // The ordinary read path retains its existing query/locking behavior.
+
+
     getDependencyReadiness: async (
       issueId: string,
       dbOrTx: any = db,

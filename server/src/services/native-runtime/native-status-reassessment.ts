@@ -47,8 +47,8 @@ function isSupersededSource(
     );
 }
 
-// Workspace recovery still needs this authority guard when reassessment has
-// its own scheduled owner. Avoid evidence classification on that path.
+
+
 export async function nativeStatusReassessmentSourceIsSuperseded(
   db: Db,
   row: NativeStatusReassessmentSource,
