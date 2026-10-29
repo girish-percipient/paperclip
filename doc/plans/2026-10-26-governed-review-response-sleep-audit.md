@@ -427,3 +427,107 @@ response. The nine targeted authority/concurrency/deadline cases and all 270
 cases in the complete external-chat wait suite pass. Server typechecking passes;
 an initial test-only persisted-JSON type assertion error was corrected separately.
 Latest-head CI and integration with downstream changes remain required.
+
+
+## Current 0413 integration and governed-review acceptance
+
+The current accepted-response parent is integrated through a normal merge.
+Nineteen owned source files preserve their original bytes; ten files combine
+original and upstream edits automatically. All 10,580 unrelated upstream source
+files remain unchanged. Four reviewed conflicts combine the owned approval
+scope with the current async transaction writer, retain explicit tool-review
+producer notifications instead of restoring removed shared fanout, and preserve
+the source conversation/session-generation authority locks before the new
+review hint and row mutation. The real approval-link concurrency and status
+replay paths are exercised below. Newly added code comments were removed with
+nontrivia token identity proof; no behavior was removed.
+
+Only the owned unlanded migration artifacts were deferred. `pnpm db:generate`
+produced `0413_tired_kronos.sql`; its original concurrent index statement remains
+byte-identical. Prior executable SQL, journal entries and retained snapshot
+bytes are unchanged. Five snapshots 0409 through 0413 remain. Actual database
+build, server types/build, module boundaries, exact-head migration order and
+no-new-code-comments checks pass.
+
+Tested source `320146c29489bb1f7308422981fa946b6a3d3368` passes **2828 distinct
+cases across 37 complete files and one focused chat file**. The main selection
+passes 2399 cases in 272.11 seconds; safe replacement passes 59 in 26.04
+seconds; all 270 governed external-chat wait cases pass in 53.07 seconds; the
+complete CLI company import/export E2E passes its real child-server journey in
+13.31 seconds. The focused chat selection passes 39 in 40.41 seconds; 1760
+other chat cases are outside its name pattern and are not claimed. The main
+invocation initially skips two approval files (60 cases) because their external
+database variables were omitted. A targeted add-on supplies their own fresh
+databases and passes all 60 cases in 26.20 seconds, without repeating the
+already-passing suites. The original skipped output remains retained. Counts:
+
+| File | Passing cases |
+| --- | ---: |
+| cli/src/__tests__/company-import-export-e2e.test.ts | 1 |
+| server/src/__tests__/approval-queue-seeding-work.test.ts | 28 |
+| server/src/__tests__/approval-retention-work.test.ts | 32 |
+| server/src/__tests__/approvals-service.test.ts | 8 |
+| server/src/__tests__/chat-channels.integration.test.ts (focused) | 39 |
+| server/src/__tests__/committed-chat-response-authority.test.ts | 7 |
+| server/src/__tests__/issue-recovery-actions.test.ts | 89 |
+| server/src/__tests__/issue-thread-interactions-telemetry.test.ts | 9 |
+| server/src/__tests__/native-finalization-recovery.test.ts | 32 |
+| server/src/__tests__/native-interaction-bridge.test.ts | 7 |
+| server/src/__tests__/native-status-arbiter-corpus.test.ts | 94 |
+| server/src/__tests__/native-workspace-sync.test.ts | 10 |
+| server/src/__tests__/recovery-stale-issue-lock-sweep.test.ts | 40 |
+| server/src/__tests__/satisfied-connection-intents.test.ts | 52 |
+| server/src/__tests__/server-startup-feedback-export.test.ts | 71 |
+| server/src/__tests__/slack-conversation-lifecycle.test.ts | 41 |
+| server/src/__tests__/tool-access-oauth-protocol.integration.test.ts | 2 |
+| server/src/modules/run-dispatch/adapters/postgres.test.ts | 69 |
+| server/src/modules/wake-queue/adapters/postgres.test.ts | 93 |
+| server/src/modules/wake-queue/adapters/queued-comment-postgres.test.ts | 5 |
+| server/src/services/chat-monitor-continuation.test.ts | 21 |
+| server/src/services/execution-control-reconciliation.test.ts | 10 |
+| server/src/services/explicit-native-continuation.test.ts | 335 |
+| server/src/services/heartbeat/queue.test.ts | 32 |
+| server/src/services/heartbeat/recovery.test.ts | 45 |
+| server/src/services/heartbeat/run-control.test.ts | 51 |
+| server/src/services/heartbeat/run-lifecycle.test.ts | 34 |
+| server/src/services/heartbeat/upgrade-readiness.test.ts | 7 |
+| server/src/services/issue-thread-interactions.test.ts | 13 |
+| server/src/services/legacy-execution-recovery.test.ts | 15 |
+| server/src/services/native-runtime/external-chat-wait.integration.test.ts | 270 |
+| server/src/services/native-runtime/native-restart-recovery.test.ts | 25 |
+| server/src/services/native-runtime/native-run-finalizer-telemetry.test.ts | 29 |
+| server/src/services/native-runtime/native-safe-replacement.test.ts | 59 |
+| server/src/services/native-runtime/native-session-executor.test.ts | 968 |
+| server/src/services/native-runtime/native-workspace-export-retry.test.ts | 80 |
+| server/src/services/native-runtime/native-workspace-reconstruction.test.ts | 50 |
+| server/src/services/native-runtime/paperclip-control-plane-port.test.ts | 55 |
+
+The complete 94-case status-authority corpus also passes again on the same
+database. The repeat is not double-counted. Retained PSC/OUT/sentinel rows
+remain unchanged and each run uses distinct fixture prefixes. Thirty-one
+separate fresh PostgreSQL 17 databases migrate through 0413. Five main
+embedded-only fixture imports and the CLI fixture import temporarily use
+their own external databases on this IPC-exhausted host, then restore byte
+for byte. Assertions and timing limits remain unchanged. This qualifies
+external-database behavior; it does not reproduce embedded CI locally.
+
+Validation started at `2b7f491641f22fb7577859681f8b632117113c8d`. The CLI
+comment cleanup was already present when pre-run source hashes were captured
+but was omitted from that commit's server/database-only staging. Committing
+those exact bytes as `320146c29489bb1f7308422981fa946b6a3d3368` changed no working
+source during validation. All 38 selected committed files match the pre-run
+hashes after fixture restoration. The comment cleanup has token identity proof.
+
+A populated 0412-to0413 upgrade preserves all 411 prior receipts and all
+38 companies, appends exactly one receipt, and adds none on replay. The
+receipt index is valid and ready on fresh and upgraded databases. The
+preexisting response-selection statistic is retained. Earlier failed checks
+and restricted retries above keep their original scope. The first local
+composition bookkeeping check omitted the unstaged CLI comment cleanup; the
+aligned source proof now passes. No functional failure is reclassified by it.
+
+The published response-presentation prerequisite is adopted without changing
+any accepted complete core tree. Publication stays held until #17696 lands
+and actual squash ancestry is reconciled. Fresh published-head CI and
+exact-head Greptile 5/5 remain required. These checks do not establish deployed
+suspension, external Cloud alarm delivery or fleet savings.
