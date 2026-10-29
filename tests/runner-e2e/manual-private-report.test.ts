@@ -5,6 +5,7 @@ import path from "node:path";
 import { MANUAL_PRIVATE_EXECUTIONS, MANUAL_PRIVATE_PROTOCOL } from "./manual-private-retention.js";
 vi.mock("./private-history.js",async original=>({...await original<typeof import("./private-history.js")>(),retainPrivateTransfer:vi.fn().mockResolvedValue({private:true})}));
 import { retainPrivateTransfer } from "./private-history.js";
+import { stageDashboardBrandAssets } from "./report-assets.js";
 import { uploadReport } from "./manual-private-transfer.js";
 const roots:string[]=[];
 afterEach(async()=>{vi.clearAllMocks();await Promise.all(roots.splice(0).map(root=>rm(root,{recursive:true,force:true})));});
@@ -24,4 +25,10 @@ it("scans and seals genuine generated report bytes before transfer",async()=>{
  const f=await fixture();await writeFile(path.join(f.source,"report.log"),"The original feature failed; raw grade unchanged.\n");await uploadReport(f.env);
  expect(retainPrivateTransfer).toHaveBeenCalledOnce();const options=vi.mocked(retainPrivateTransfer).mock.calls[0]![0];
  expect(options.directory).not.toBe(f.source);expect(options.evidenceCompleteness).toMatchObject({doesNotAttestFeatureOutcome:true});
+});
+
+it("retains the actual brand asset producer tree",async()=>{
+ const f=await fixture();await mkdir(path.join(f.source,"normalized"));await stageDashboardBrandAssets(path.join(f.source,"normalized"));
+ await mkdir(path.join(f.source,"html"));await writeFile(path.join(f.source,"html/index.html"),"<!doctype html><title>Synthetic report metadata</title>");
+ await uploadReport(f.env);expect(retainPrivateTransfer).toHaveBeenCalledOnce();
 });

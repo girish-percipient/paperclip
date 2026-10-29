@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { appendFile, cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { isTrustedGeneratedReportAsset } from "./manual-private-report-assets.js";
 import { sealManualResultEvidence } from "./manual-private-handoff.js";
 import { normalizedSecrets } from "./redaction.js";
 import { CREDENTIAL_NAMES } from "./types.js";
@@ -49,20 +50,24 @@ async function verify(env: NodeJS.ProcessEnv) {
   await verifyPrivateHistory(publisher, bucket);
   await writeFile(path.join(root, "preflight.json"), JSON.stringify({ ...identity, status: "verified" }), { mode: 0o600, flag: "wx" });
 }
-export async function validateSealedInventory(directory: string, inventory: string, id?: string) {
+export async function validateSealedInventory(directory: string, inventory: string, id?: string, treeKind: "standard" | "generated-report" = "standard") {
   const receipt = JSON.parse(await readFile(path.join(directory, inventory), "utf8"));
   if (receipt.protocol !== MANUAL_PRIVATE_PROTOCOL || id !== undefined && receipt.executionId !== id || receipt.complete !== true
     || !Array.isArray(receipt.files) || !receipt.files.length || receipt.files.length > 4096
     || hash(JSON.stringify(receipt.files)) !== receipt.inventorySha256) throw new Error("Original evidence inventory is incomplete");
+  if (id === undefined && receipt.treeKind !== treeKind) throw new Error("Private evidence tree kind differs from its inventory");
   const expected = new Set<string>(inventory.startsWith("../") ? [] : [inventory]); let bytes = 0;
   for (const row of receipt.files) {
     if (!row || Object.keys(row).sort().join() !== "bytes,path,sha256" || typeof row.path !== "string"
       || row.path.split("/").some((part: string) => !part || part === "." || part === "..") || row.path.includes("\\")
-      || !isStandardEvidenceFile(id === undefined ? `html-report/${row.path}` : row.path)
       || expected.has(row.path) || !Number.isSafeInteger(row.bytes) || row.bytes < 0 || !/^[0-9a-f]{64}$/.test(row.sha256)) throw new Error("Invalid original evidence inventory row");
     expected.add(row.path); bytes += row.bytes;
     const file = path.join(directory, row.path), metadata = await lstat(file);
-    if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size !== row.bytes || hash(await readFile(file)) !== row.sha256) throw new Error("Original evidence changed after its scan");
+    if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size !== row.bytes) throw new Error("Original evidence changed after its scan");
+    const data = await readFile(file);
+    if (hash(data) !== row.sha256) throw new Error("Original evidence changed after its scan");
+    if (!isStandardEvidenceFile(id === undefined ? `html-report/${row.path}` : row.path)
+      && (id !== undefined || treeKind !== "generated-report" || !await isTrustedGeneratedReportAsset(row.path, data))) throw new Error("Invalid original evidence inventory row");
   }
   if (bytes !== receipt.sourceBytes || bytes > 256 * 1024 * 1024) throw new Error("Original evidence byte accounting changed");
   const actual = new Set<string>();
@@ -164,9 +169,9 @@ export async function uploadReport(env: NodeJS.ProcessEnv) {
     || evidenceCompleteness.cells.map(cell => cell.executionId).sort().join() !== [...approval.executionIds].sort().join()) throw new Error("Private report lacks exact cell completeness receipts");
   const secrets = normalizedSecrets([...CREDENTIAL_NAMES.map(name => env[name]), env.AWS_ACCESS_KEY_ID, env.AWS_SECRET_ACCESS_KEY, env.AWS_SESSION_TOKEN]);
   await sealManualResultEvidence({ root, protocol: MANUAL_PRIVATE_PROTOCOL, private: true, workflowSha: approval.workflowSha,
-    targetSha: approval.targetSha, runId: approval.runId, attempt: approval.attempt, executionIds: [...approval.executionIds] }, secrets, source);
+    targetSha: approval.targetSha, runId: approval.runId, attempt: approval.attempt, executionIds: [...approval.executionIds] }, secrets, source, "generated-report");
   const sealed = path.join(root, "sealed-results");
-  await validateSealedInventory(path.join(sealed, "html-report"), "../result-evidence-inventory.json");
+  await validateSealedInventory(path.join(sealed, "html-report"), "../result-evidence-inventory.json", undefined, "generated-report");
   const receipt = path.join(root, "report-transfer.json"), publisher = new BoundedHistoryPublisher(receipt);
   await retainPrivateTransfer({ operation: "upload", kind: "manual-report", runId: approval.runId, directory: sealed, bucket, publisher, evidenceCompleteness }, receipt,
     () => new BoundedHistoryPublisher(`${receipt}.retention.json`));
