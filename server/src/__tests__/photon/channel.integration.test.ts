@@ -1,3 +1,4 @@
+import { nativeReviewResponseWork } from "../../services/native-runtime/native-review-response-work.js";
 import { nativeResponsePresentationWork } from "../../services/native-runtime/native-response-presentation-work.js";
 import { DELIVERY_QUEUES } from "../../services/delivery-work-notifications.js";
 import { idleWorkSnapshot } from "../../services/task-admission.js";
@@ -376,18 +377,20 @@ describe("iMessage Photon channel control plane", () => {
       },
     };
   }
-  it("keeps repeated active Photon ownership assertions out of response reconstruction and wakes once on recovery", async () => {
+  it.each([DELIVERY_QUEUES.nativeResponsePresentation, DELIVERY_QUEUES.nativeReviewResponse])(
+    "keeps repeated active Photon ownership assertions out of %s reconstruction and wakes once on recovery", async queue => {
     const t = await setup();
     await t.start();
     await t.qualify();
     const errors: unknown[] = [];
     const coordinator = createDeliveryWorkCoordinator({ owner: db, canRun: () => true, onError: error => errors.push(error) });
     coordinators.push(coordinator);
-    const worker = nativeResponsePresentationWork(db).register(coordinator, () => true);
+    const work = queue === DELIVERY_QUEUES.nativeResponsePresentation ? nativeResponsePresentationWork(db) : nativeReviewResponseWork(db);
+    const worker = work.register(coordinator, () => true);
     const debug = db.$client.options.debug;
     const hints: unknown[] = [];
     const queries: string[] = [];
-    const unsubscribe = subscribeDatabaseWork(db, DELIVERY_QUEUES.nativeResponsePresentation, (event, values) => {
+    const unsubscribe = subscribeDatabaseWork(db, queue, (event, values) => {
       if (event === "settled") for (const value of values ?? []) {
         const scope = JSON.parse(value);
         if (scope.companyId === t.companyId) hints.push(scope);
@@ -418,7 +421,7 @@ describe("iMessage Photon channel control plane", () => {
       expect(hints).toEqual([]);
       expect(queries).toEqual([]);
       expect(errors).toEqual([]);
-    } finally { unsubscribe(); db.$client.options.debug = debug; worker.stop(); }
+    } finally { unsubscribe(); db.$client.options.debug = debug; if ("stop" in worker) worker.stop(); }
   });
 
   it("recovers a Photon transport loss through the receiver worker and cancels fatal recovery", async () => {
