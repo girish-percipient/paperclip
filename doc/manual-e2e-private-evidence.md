@@ -41,13 +41,16 @@ or run. Before a supported run, the operator must:
 
 1. Deploy this workflow and its helpers together on the protected default branch.
 2. Keep the existing numeric actor allowlist and protected default-branch checks.
-3. Protect `runner-e2e-private-paid` and `runner-e2e-private-history` with the
-   required operator reviewers and default-branch restrictions.
+3. Keep `runner-e2e-private-paid` and `runner-e2e-private-history` restricted to
+   the default branch. Establish administrator-controlled approval for the exact
+   source and original run. A reviewer UI may supply this control but is not
+   mandatory. Prove the actual control and runtime contract before admission.
 4. Provide the existing private-history role ARN, AWS region and bucket variables
    in those environments. The existing role must support the existing bounded
    prefix and bucket-policy, ownership, public-access and retention reads.
-5. Set `RUNNER_E2E_MANUAL_PRIVATE_APPROVALS_JSON` in both protected environments.
-   Approve the exact resolved workflow SHA, target SHA, original run ID,
+5. Provide `RUNNER_E2E_MANUAL_PRIVATE_APPROVALS_JSON` through administrator-controlled
+   configuration available to both protected jobs. Approve the exact resolved
+   workflow SHA, target SHA, original run ID,
    attempt `1`, selected execution IDs and launcher SHA-256.
 6. Use a reviewed compatible target. Its private handoff and policy modules must
    match the workflow implementation byte for byte. Its launcher digest must
@@ -55,9 +58,11 @@ or run. Before a supported run, the operator must:
    protocol automatically.
 
 Classification happens before the protected job. It grants no archive authority.
-The run-specific approval is read after the protected job gate. This lets an
-operator bind the actual original run ID before approving paid execution. A
-missing or stale row stops before target dependency setup, archive credentials,
+The administrator-controlled record must bind the actual original run ID before
+target dependency setup or archive credentials. Prove who can change that record
+and that each job consumes the exact approved record. An environment reviewer
+gate is one way to govern authorization; its UI is not required. A missing or
+stale row still fails closed before target dependency setup, archive credentials,
 model credentials or fixture secrets. There is no wildcard approval.
 
 The variable has this closed shape (all values below are placeholders):
