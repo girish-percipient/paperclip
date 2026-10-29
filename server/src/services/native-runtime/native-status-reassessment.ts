@@ -166,9 +166,8 @@ export async function reassessNativeStatusFromSource(
     if (!assessment || !reassessment || !resultRow || !contractRow) {
       throw new Error("native_reconciliation_reassessment_missing");
     }
-    const currentIssue = retiredAutomaticReview
-      ? await db.select().from(issues).where(and(eq(issues.id, row.issueId), eq(issues.companyId, row.companyId))).then((entries) => entries[0])
-      : null;
+    const currentIssue = await db.select().from(issues)
+      .where(and(eq(issues.id, row.issueId), eq(issues.companyId, row.companyId))).then((entries) => entries[0]);
     const readiness = retiredAutomaticReview ? await issueService(db).getDependencyReadiness(row.issueId, db) : null;
     const currentRun = retiredAutomaticReview ? await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, row.runId)).then((entries) => entries[0]) : null;
     const latestContract = retiredAutomaticReview ? await db.select({ id: completionContracts.id }).from(completionContracts)

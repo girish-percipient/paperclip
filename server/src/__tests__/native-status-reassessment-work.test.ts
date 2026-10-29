@@ -488,6 +488,23 @@ describe("native reassessment worker lifecycle", () => {
     await quiet();
   });
 
+  it.each([false, true])("preserves the required quality-review gate after real evidence approval (required=%s)", async required => {
+    const seeded = await seedReview();
+    await db.update(issueWorkProducts).set({ reviewState: "none" }).where(eq(issueWorkProducts.id, seeded.workProductId));
+    if (required) await db.update(issues).set({ executionPolicy: { requiredQualityReview: {
+      version: 1, deliverables: [{ key: "output", label: "Verified output" }],
+    } } }).where(eq(issues.id, seeded.issueId));
+    await start();
+    await flush();
+    await quiet();
+    await workProductService(db).update(seeded.workProductId, { reviewState: "approved" });
+    await flush();
+    expect(await status(seeded.issueId)).toBe(required ? "in_progress" : "done");
+    const decisions = await db.select().from(statusDecisions).where(eq(statusDecisions.issueId, seeded.issueId));
+    if (required) expect(decisions.find(row => row.id !== seeded.decisionId)?.reasonCode).toBe("required_quality_review_incomplete");
+    await quiet();
+  });
+
   it.each(["update", "create", "primary replacement", "import", "attachment", "source promotion"] as const)("wakes from the real work-product %s writer", async writer => {
     const seeded = await seedReview();
     if (writer === "update") await db.update(issueWorkProducts).set({ reviewState: "none" }).where(eq(issueWorkProducts.id, seeded.workProductId));
