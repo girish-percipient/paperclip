@@ -6,9 +6,11 @@ import { DELIVERY_QUEUES, notifyDeliveryWork } from "./delivery-work-notificatio
 export type NativeFinalizationWorkScope = { companyId: string; runId?: string; issueId?: string };
 
 export async function notifyNativeFinalizationWork(transaction: object, scope: NativeFinalizationWorkScope) {
-  await notifyNativeStatusReassessment(transaction, scope);
-  await notifyNativeResponsePresentation(transaction, scope);
-  await notifyNativeReviewResponse(transaction, scope);
+  if (scope.issueId || scope.runId) {
+    await notifyNativeStatusReassessment(transaction, scope);
+    await notifyNativeResponsePresentation(transaction, scope);
+    await notifyNativeReviewResponse(transaction, scope);
+  }
   await notifyDeliveryWork(transaction, DELIVERY_QUEUES.nativePendingEffects,
     JSON.stringify({ companyId: scope.companyId, runId: scope.runId }));
 }

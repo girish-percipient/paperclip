@@ -1,3 +1,4 @@
+import { readRequiredQualityReview } from "../required-quality-review.js";
 import { hasNativeWorkspaceFinalizationOwner } from "./native-workspace-finalization-recovery-state.js";
 import { and, desc, eq, gt, or } from "drizzle-orm";
 import { completionContracts, heartbeatRuns, issueWorkProducts, issues, nativeRunResults,
@@ -208,9 +209,11 @@ export async function reassessNativeStatusFromSource(
     const governanceGate = retiredAutomaticReview && currentIssue
       ? await pendingNativeGovernance({ db, companyId: row.companyId, issueId: row.issueId,
           runId: row.runId, executionState: record(currentIssue.executionState) }) : null;
-    const decision = retiredAutomaticReview && currentIssue
+    const qualityReview = currentIssue ? await readRequiredQualityReview(db, currentIssue) : null;
+    let decision = retiredAutomaticReview && currentIssue
       ? resolveNativeFinalizerStatus({
           hasPendingChildCompletion,
+          requiredQualityReviewSatisfied: qualityReview?.satisfied,
           assessment: reassessment, terminalState: "succeeded", workspaceFinalizeStatus: "succeeded",
           governanceGate,
           completionClaimPolicyAccepted: contractRow.risk === "low" && contractRow.completionAuthority === "agent_claim_policy",
@@ -222,6 +225,10 @@ export async function reassessNativeStatusFromSource(
           facts: { ...facts, hasPendingChildCompletion },
           priorIssueStatus: row.issueStatus as NativeAuthoritativeIssueStatus, agentId: row.agentId,
         });
+    if (decision.statusAction === "done" && qualityReview?.satisfied === false) {
+      decision = resolveNativeFinalizerStatus({ assessment: reassessment, terminalState: "succeeded", workspaceFinalizeStatus: "succeeded",
+        requiredQualityReviewSatisfied: false, priorIssueStatus: row.issueStatus as NativeAuthoritativeIssueStatus, agentId: row.agentId });
+    }
     let committed: Awaited<ReturnType<typeof commitNativeStatusDecision>>;
     try {
       committed = await commitNativeStatusDecision({
