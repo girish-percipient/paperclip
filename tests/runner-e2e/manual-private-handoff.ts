@@ -2,7 +2,8 @@ import { constants } from "node:fs";
 import { createHash } from "node:crypto";
 import { copyFile, lstat, mkdir, open, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { packageEvidence, isStandardEvidencePath, type EvidencePackageResult } from "./evidence.js";
+import { packageEvidence, isStandardEvidencePath, isStandardEvidenceFile, type EvidencePackageResult } from "./evidence.js";
+import { assertSecretFree, normalizedSecrets } from "./redaction.js";
 import { MANUAL_PRIVATE_PROTOCOL, manualCellKind, type ManualRetentionIdentity } from "./manual-private-retention.js";
 
 export interface ManualPrivateHandoff extends ManualRetentionIdentity {
@@ -39,6 +40,7 @@ export async function sealStandardOriginalEvidence(input: {
   context: ManualPrivateHandoff; executionId: string; source: string; evidence: EvidencePackageResult; secrets: readonly string[]; expectPassScreenshot: boolean;
 }) {
   if (!input.context.executionIds.includes(input.executionId)) throw new Error("Private evidence execution is outside preflight");
+  const secrets = normalizedSecrets(input.secrets).flatMap(value => [value, encodeURIComponent(value), Buffer.from(value).toString("base64"), Buffer.from(value).toString("base64url")]);
   const out = path.join(input.context.root, "originals", manualCellKind(input.executionId));
   const root = await realpath(input.source), info = await lstat(input.source);
   if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("Invalid original standard evidence root");
@@ -64,6 +66,8 @@ export async function sealStandardOriginalEvidence(input: {
         continue;
       }
       if (!isStandardEvidencePath(name)) continue;
+      if (!isStandardEvidenceFile(name)) throw new Error("Unsupported original evidence carrier cannot be retained");
+      assertSecretFree(name, secrets, "private evidence path");
       const source = path.join(root, name), target = path.join(out, name);
       if (!(await realpath(source)).startsWith(`${root}${path.sep}`)) throw new Error("Original evidence escaped its owned root");
       const handle = await open(source, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -93,7 +97,7 @@ export async function sealStandardOriginalEvidence(input: {
     const validation = path.join(input.context.root, `validation-${manualCellKind(input.executionId)}`);
     await mkdir(validation, { mode: 0o700 });
     try {
-      const scan = await packageEvidence({ privateDir: out, uploadDir: validation, secrets: [...input.secrets], expectPassScreenshot: input.expectPassScreenshot });
+      const scan = await packageEvidence({ privateDir: out, uploadDir: validation, secrets, expectPassScreenshot: input.expectPassScreenshot });
       if (scan.leaks.length || scan.missing.length) {
         await writeFile(path.join(input.context.root, "contamination.json"), JSON.stringify({ protocol: MANUAL_PRIVATE_PROTOCOL, status: scan.leaks.length ? "withheld_credential_contamination" : "required_evidence_missing", complete: false }), { mode: 0o600, flag: "wx" });
         throw new Error("Original evidence failed unchanged privacy or required-file checks");
@@ -102,7 +106,52 @@ export async function sealStandardOriginalEvidence(input: {
     records.sort((a, b) => a.path.localeCompare(b.path));
     const receipt = { protocol: MANUAL_PRIVATE_PROTOCOL, executionId: input.executionId, targetSha: input.context.targetSha,
       complete: true, sourceBytes: bytes, files: records, inventorySha256: createHash("sha256").update(JSON.stringify(records)).digest("hex") };
-    await writeFile(path.join(out, "original-evidence-inventory.json"), `${JSON.stringify(receipt, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+    const serialized = `${JSON.stringify(receipt, null, 2)}\n`;
+    assertSecretFree(serialized, secrets, "private evidence inventory");
+    await writeFile(path.join(out, "original-evidence-inventory.json"), serialized, { mode: 0o600, flag: "wx" });
     return receipt;
   } catch (error) { await rm(out, { recursive: true, force: true }); throw error; }
+}
+
+export async function sealManualResultEvidence(context: ManualPrivateHandoff, secrets: readonly string[]) {
+  const root = path.join(context.root, "results"), wrapper = path.join(context.root, "result-validation");
+  const { cp, rename } = await import("node:fs/promises");
+  await mkdir(wrapper, { mode: 0o700 });
+  const records: Array<{ path: string; bytes: number; sha256: string }> = [];
+  let bytes = 0;
+  const scanSecrets = normalizedSecrets(secrets).flatMap(value => [value, encodeURIComponent(value), Buffer.from(value).toString("base64"), Buffer.from(value).toString("base64url")]);
+  async function visit(relative: string) {
+    for (const entry of await readdir(path.join(root, relative), { withFileTypes: true })) {
+      const name = relative ? `${relative}/${entry.name}` : entry.name;
+      assertSecretFree(name, scanSecrets, "private packaged evidence path");
+      if (entry.isSymbolicLink() || !entry.isFile() && !entry.isDirectory() || name.split("/").length > 24) throw new Error("Invalid packaged evidence entry");
+      if (entry.isDirectory()) { await visit(name); continue; }
+      if (!isStandardEvidenceFile(`html-report/${name}`)) throw new Error("Unsupported packaged evidence carrier");
+      const data = await readFile(path.join(root, name)); bytes += data.length;
+      if (bytes > 256 * 1024 * 1024 || records.length >= 4096) throw new Error("Complete packaged evidence exceeds allowance");
+      records.push({ path: name, bytes: data.length, sha256: createHash("sha256").update(data).digest("hex") });
+    }
+  }
+  try {
+    await visit("");
+    if (!records.length) throw new Error("No genuine packaged evidence was produced");
+    await cp(root, path.join(wrapper, "html-report"), { recursive: true, errorOnExist: true, force: false });
+    const validation = path.join(context.root, "packaged-scan");
+    try {
+      const scan = await packageEvidence({ privateDir: wrapper, uploadDir: validation, secrets: scanSecrets, expectPassScreenshot: false });
+      if (scan.leaks.length) throw new Error("Packaged evidence contains credential contamination");
+      for (const record of records) {
+        if (createHash("sha256").update(await readFile(path.join(wrapper, "html-report", record.path))).digest("hex") !== record.sha256)
+          throw new Error("Packaged evidence changed during handoff");
+      }
+    } finally { await rm(validation, { recursive: true, force: true }); }
+    records.sort((a, b) => a.path.localeCompare(b.path));
+    const receipt = { protocol: MANUAL_PRIVATE_PROTOCOL, complete: true, sourceBytes: bytes, files: records,
+      inventorySha256: createHash("sha256").update(JSON.stringify(records)).digest("hex") };
+    const serialized = `${JSON.stringify(receipt, null, 2)}\n`;
+    assertSecretFree(serialized, scanSecrets, "private packaged inventory");
+    await writeFile(path.join(wrapper, "result-evidence-inventory.json"), serialized, { mode: 0o600, flag: "wx" });
+    await rename(wrapper, path.join(context.root, "sealed-results"));
+    return receipt;
+  } catch (error) { await rm(wrapper, { recursive: true, force: true }); throw error; }
 }

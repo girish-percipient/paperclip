@@ -89,7 +89,9 @@ async function transferVerifiedArtifact(options: TransferOptions) {
       "--range", `bytes=0-${PRIVATE_ARCHIVE_BYTES}`, archive]);
     if ((await lstat(archive)).size > PRIVATE_ARCHIVE_BYTES) throw new Error("Private archive exceeds transfer allowance");
     const metadata = await archivePrivateEvidence("unpack", archive, options.directory);
-    return { ...metadata, uri: `s3://${options.bucket}/${key}` };
+    const hash = createHash("sha256");
+    for await (const chunk of createReadStream(archive)) hash.update(chunk);
+    return { ...metadata, uri: `s3://${options.bucket}/${key}`, sha256: hash.digest("hex") };
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }

@@ -35,11 +35,11 @@ export function authorizeManualPrivateEvidence(identity: ManualRetentionIdentity
   if (!keys(policy, ["version", "approvals"]) || policy.version !== 1 || !Array.isArray(policy.approvals) || policy.approvals.length > 32)
     throw new Error("Invalid protected manual evidence approval");
   const matches = policy.approvals.filter(row => {
-    if (!keys(row, ["workflowSha", "targetSha", "executionIds", "protocol", "launchSha256"]) || !sha.test(String(row.workflowSha))
-      || !sha.test(String(row.targetSha)) || row.protocol !== MANUAL_PRIVATE_PROTOCOL || !/^[0-9a-f]{64}$/.test(String(row.launchSha256)))
+    if (!keys(row, ["workflowSha", "targetSha", "runId", "attempt", "executionIds", "protocol", "launchSha256"]) || !sha.test(String(row.workflowSha))
+      || !sha.test(String(row.targetSha)) || !/^[1-9][0-9]{0,19}$/.test(String(row.runId)) || row.attempt !== "1" || row.protocol !== MANUAL_PRIVATE_PROTOCOL || !/^[0-9a-f]{64}$/.test(String(row.launchSha256)))
       throw new Error("Invalid protected manual evidence approval");
     const selected = canonicalManualIds(row.executionIds);
-    return row.workflowSha === identity.workflowSha && row.targetSha === identity.targetSha && selected.join() === ids.join();
+    return row.workflowSha === identity.workflowSha && row.targetSha === identity.targetSha && row.runId === identity.runId && row.attempt === identity.attempt && selected.join() === ids.join();
   });
   if (matches.length !== 1) throw new Error("Exact protected manual evidence approval missing or ambiguous");
   return Object.freeze({ ...identity, executionIds: Object.freeze(ids), protocol: MANUAL_PRIVATE_PROTOCOL,
@@ -57,7 +57,7 @@ export function manualPrivateSessionPolicy(input: { bucket: string; runId: strin
   const cells = ids.map(id => `${prefix}${manualCellKind(id)}.zip`);
   return { Version: "2012-10-17", Statement: [
     { Effect: "Allow", Action: ["s3:GetBucketVersioning", "s3:GetLifecycleConfiguration", "s3:GetBucketObjectLockConfiguration", "s3:GetReplicationConfiguration", "s3:GetBucketPublicAccessBlock", "s3:GetBucketOwnershipControls", "s3:GetBucketPolicy"], Resource: `arn:aws:s3:::${input.bucket}` },
-    ...(input.report ? [{ Effect: "Allow", Action: ["s3:GetObject"], Resource: cells }] : []),
+    ...(input.report ? [{ Effect: "Allow", Action: ["s3:GetObject"], Resource: cells.flatMap(key => [key, `${key}.upload-receipt.json`]) }] : []),
     { Effect: "Allow", Action: ["s3:PutObject"], Resource: (input.report ? [`${prefix}manual-report.zip`] : cells).flatMap(key => [key, `${key}.upload-receipt.json`]) },
   ] };
 }

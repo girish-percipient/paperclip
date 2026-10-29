@@ -41,3 +41,20 @@ it("requires the complete preflight's exact attempt, owner-only file and target 
  await expect(readManualPrivateHandoff({...env,GITHUB_RUN_ID:"124"},f.context.executionIds)).rejects.toThrow(/exact attempt/);
  await expect(readManualPrivateHandoff(env,[MANUAL_PRIVATE_EXECUTIONS[1]!])).rejects.toThrow(/exact attempt/);
 });
+it.each(["unknown.bin", "private.db"])("rejects unscanned %s under a standard directory without retaining it",async name=>{
+ const f=await fixture();f.input.secrets=["synthetic-provider-credential-1234567890"];
+ await writeFile(path.join(f.source,"snapshots",name),f.input.secrets[0]!);
+ await expect(sealStandardOriginalEvidence(f.input)).rejects.toThrow(/Unsupported/);
+});
+it("an active SVG omitted by the existing package cannot be called a complete retained original",async()=>{
+ const f=await fixture();await writeFile(path.join(f.source,"snapshots/active.svg"),'<svg xmlns="http://www.w3.org/2000/svg"><script>window.x=1</script></svg>');
+ await expect(sealStandardOriginalEvidence(f.input)).rejects.toThrow(/Unsupported/);
+});
+
+it.each(["raw", "url", "base64", "shape"])("rejects %s credential-bearing original names rather than sanitizing a complete inventory", async kind => {
+ const f=await fixture();const secret="synthetic-credential/+1234567890";f.input.secrets=[secret];
+ const name=kind==="raw"?"synthetic-credential-1234567890":kind==="url"?encodeURIComponent(secret):kind==="base64"?Buffer.from(secret).toString("base64url"):"sk-proj-synthetic123456789012345";
+ if(kind==="raw")f.input.secrets=[name];
+ await writeFile(path.join(f.source,"snapshots",`${name}.json`),'{}');
+ await expect(sealStandardOriginalEvidence(f.input)).rejects.toThrow(/Secret leak/);
+});

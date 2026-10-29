@@ -57,6 +57,12 @@ const REQUIRED_PASS_FILES = [
   path.join("snapshots", "api-state.json"),
 ] as const;
 
+export function isStandardEvidenceFile(relative: string) {
+  const extension = path.extname(relative).toLowerCase();
+  return isStandardEvidencePath(relative) && (TEXT_EXTENSIONS.has(extension) || BINARY_EXTENSIONS.has(extension)
+    || extension === ".zip");
+}
+
 export interface EvidencePackageResult {
   files: string[];
   leaks: Array<{ file: string; reason: string }>;
