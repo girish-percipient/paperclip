@@ -531,3 +531,43 @@ any accepted complete core tree. Publication stays held until #17696 lands
 and actual squash ancestry is reconciled. Fresh published-head CI and
 exact-head Greptile 5/5 remain required. These checks do not establish deployed
 suspension, external Cloud alarm delivery or fleet savings.
+
+
+### Scoped wake repair after the published parent review
+
+Source `2341714720b5c273f0ce011b48345af0ef39227f` inherits the published
+parent `ef6cb73777f0c31e3622d23d039d702b2fc08263` through a normal merge.
+Both response queues now require an issue or run on ordinary milestone and
+finalization notifications. The explicit company authority boundary invalidates
+both workers globally, preserving actual membership/configuration restoration.
+The real coalesced-input producer test covers both queues after outer commit.
+Existing pending-effects and older chat queue payloads remain unchanged.
+
+The exact three new governed-response regressions first reproduce two failures
+for repeated coarse hints while actual membership restoration passes. The same
+source and assertion limits pass after repair: repeated coarse hints do not
+reconstruct dormant governed response history, and actual membership restoration
+still publishes once. Source qualifies **2053 distinct passing cases**: 1703
+in 15 complete files and 350 selected chat cases. The complete files include
+all 273 governed response cases, 95 wake-queue adapter cases, 968 native-session
+cases, authority/lifecycle/approval consumers, and inherited monitor/finalizer
+coverage. Another 1463 chat cases are outside the selection; the complete
+1813-case chat file is not claimed for this repair. The three regressions and
+two coalescing cases are included, not added again.
+
+Fourteen complete consumer files pass 1430 cases in 123.59 seconds; all 273
+governed-response cases pass in 53.97 seconds; focused chat passes 350 in
+301.76 seconds. Thirteen dedicated PostgreSQL 17 fixtures migrate through
+0413. Only the embedded-only wake-queue import temporarily selects its own
+external fixture and restores byte for byte. All 16 captured test hashes match.
+Database build, server types/build, module boundaries and full-SHA migration
+order pass. No assertion or time-limit changes qualify the repair.
+
+The composition proof retains 12646 parent/unrelated tree entries exactly,
+36 owned entries exactly and one identical shared change. Only two notification
+files need manual scope resolutions; the third overlap, the native finalizer,
+preserves the exact parent hunk bodies automatically. The database tree is
+identical to the previously qualified 0413 source; no SQL, executable history,
+journal or snapshot is regenerated. Earlier 2828-case acceptance and populated
+upgrade/replay evidence retain their earlier source scope. The remote PR remains
+held until its parent merges and fresh current-head CI and reviews pass.
