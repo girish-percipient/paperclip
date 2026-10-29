@@ -33,6 +33,8 @@ import {
 import { isImmutableDaytonaImage, runnerMatrix } from "./catalog.js";
 import { renderRunnerE2EDashboard } from "./dashboard.js";
 import { packageEvidence } from "./evidence.js";
+import { readManualPrivateHandoff, preserveOriginalFrameworkResult, sealStandardOriginalEvidence, type ManualPrivateHandoff } from "./manual-private-handoff.js";
+import { requiresPrivateManualEvidence } from "./manual-private-retention.js";
 import { copySharedEvidence } from "./shared-evidence.js";
 import { classifyFailure } from "./failure-classifier.js";
 import { mustPreserveRecoveryState, shouldKeepFailedDiagnostics } from "./cleanup-verification.js";
@@ -89,7 +91,8 @@ import {
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 const localEnvPath = path.join(repositoryRoot, ".env.runner-e2e.local");
-const resultsRoot = path.join(repositoryRoot, "tests/runner-e2e/results");
+let resultsRoot = path.join(repositoryRoot, "tests/runner-e2e/results");
+let manualPrivateHandoff: ManualPrivateHandoff | undefined;
 const activeProcessGroups = new Set<number>();
 const activeProcessCleanup = new Map<number, Promise<string | null>>();
 const activeProcessTerminators = new Map<number, () => void>();
@@ -478,6 +481,7 @@ async function runAttempt(input: {
       "One isolated runner E2E harness cannot mix profiles or environments",
     );
   }
+  if (process.env.GITHUB_ACTIONS === "true" && !input.operations && executions.some(candidate => requiresPrivateManualEvidence(candidate.id)) && !manualPrivateHandoff) throw new Error("Sensitive manual evidence requires verified restricted retention before setup");
   const upgrades = await readUpgradeArtifacts(process.env[upgradeArtifactKey]);
   if (upgrades) {
     // All attempts and the browser use A's installed fixture admission. The
@@ -494,6 +498,7 @@ async function runAttempt(input: {
   const sharedMemoryBaseline = snapshotDarwinSharedMemory();
   const temporaryParent = await realpath(os.tmpdir());
   const temporaryRoot = await createRunnerE2ETemporaryRoot(temporaryParent);
+  const privateDir = manualPrivateHandoff ? path.join(manualPrivateHandoff.root, "capture") : path.join(temporaryRoot, "artifacts-private");
   const publishedResults: RunnerE2EResult[] = [];
   const publishedResultPaths = new Map<string, string>();
   let attemptSecrets: string[] = [];
@@ -504,7 +509,6 @@ async function runAttempt(input: {
   try {
     const paperclipHome = path.join(temporaryRoot, "paperclip-home");
     const workspace = path.join(temporaryRoot, "workspace");
-    const privateDir = path.join(temporaryRoot, "artifacts-private");
     const instanceId = `runner-e2e-${randomBytes(8).toString("hex")}`;
     const configPath = path.join(
       paperclipHome,
@@ -820,6 +824,7 @@ async function runAttempt(input: {
           originalResult: { status: original.status, failureClass: original.failureClass, error: original.error },
         }, credentials), null, 2)}\n`, { mode: 0o600 });
       }
+      if (manualPrivateHandoff) await preserveOriginalFrameworkResult(casePrivateDir);
       await writeFile(
         resultPath,
         `${JSON.stringify(sanitizeJson(result, credentials), null, 2)}\n`,
@@ -831,6 +836,7 @@ async function runAttempt(input: {
         secrets: credentials,
         expectPassScreenshot: result.status === "passed",
       });
+      const originalEvidence = evidence, originalFeaturePassed = result.status === "passed";
       if (evidence.leaks.length > 0 || evidence.missing.length > 0) {
         result = {
           ...result,
@@ -856,6 +862,8 @@ async function runAttempt(input: {
           expectPassScreenshot: false,
         });
       }
+      if (manualPrivateHandoff) await sealStandardOriginalEvidence({ context: manualPrivateHandoff,
+        executionId: candidate.id, source: casePrivateDir, evidence: originalEvidence, secrets: credentials, expectPassScreenshot: originalFeaturePassed });
       console.log(
         `${result.status === "passed" ? "PASS" : "FAIL"} ${candidate.id} attempt ${attempt} -> ${uploadDir}`,
       );
@@ -871,7 +879,7 @@ async function runAttempt(input: {
     try { await gateway?.close(); } catch (error) { gatewayCleanupError = error; }
     if (!processCleanupFailed) reapNewDetachedDarwinSharedMemory(sharedMemoryBaseline);
     let cleanupError: unknown;
-    const resourceAdmissionStarted = await access(path.join(temporaryRoot, "artifacts-private", "resource-admission-started"))
+    const resourceAdmissionStarted = await access(path.join(privateDir, "resource-admission-started"))
       .then(() => true).catch((error: NodeJS.ErrnoException) => error.code !== "ENOENT");
     if (mustPreserveRecoveryState({ processCleanupFailed, resourceAdmissionStarted, results: rawCleanupResults })) {
       // Remote allocation cleanup is journaled in this instance's database.
@@ -1046,6 +1054,8 @@ async function main() {
     throw error;
   }
   const executions = selectRunnerExecutions(options, runnerMatrix);
+  manualPrivateHandoff = await readManualPrivateHandoff(process.env, executions.map(execution => execution.id));
+  if (manualPrivateHandoff) resultsRoot = path.join(manualPrivateHandoff.root, "results");
   if (options.installedStartupOnly) {
     assertInstalledStartupOnly(process.env, executions, options);
     assertRunnerE2EPrerequisites(executions);

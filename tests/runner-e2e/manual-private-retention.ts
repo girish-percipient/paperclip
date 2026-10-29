@@ -35,15 +35,15 @@ export function authorizeManualPrivateEvidence(identity: ManualRetentionIdentity
   if (!keys(policy, ["version", "approvals"]) || policy.version !== 1 || !Array.isArray(policy.approvals) || policy.approvals.length > 32)
     throw new Error("Invalid protected manual evidence approval");
   const matches = policy.approvals.filter(row => {
-    if (!keys(row, ["workflowSha", "targetSha", "executionIds", "protocol"]) || !sha.test(String(row.workflowSha))
-      || !sha.test(String(row.targetSha)) || row.protocol !== MANUAL_PRIVATE_PROTOCOL)
+    if (!keys(row, ["workflowSha", "targetSha", "executionIds", "protocol", "launchSha256"]) || !sha.test(String(row.workflowSha))
+      || !sha.test(String(row.targetSha)) || row.protocol !== MANUAL_PRIVATE_PROTOCOL || !/^[0-9a-f]{64}$/.test(String(row.launchSha256)))
       throw new Error("Invalid protected manual evidence approval");
     const selected = canonicalManualIds(row.executionIds);
     return row.workflowSha === identity.workflowSha && row.targetSha === identity.targetSha && selected.join() === ids.join();
   });
   if (matches.length !== 1) throw new Error("Exact protected manual evidence approval missing or ambiguous");
   return Object.freeze({ ...identity, executionIds: Object.freeze(ids), protocol: MANUAL_PRIVATE_PROTOCOL,
-    approvalSha256: createHash("sha256").update(approvalJson).digest("hex"), private: true as const });
+    launchSha256: String(matches[0]!.launchSha256), approvalSha256: createHash("sha256").update(approvalJson).digest("hex"), private: true as const });
 }
 export function manualCellKind(id: string) {
   if (!execution.test(id)) throw new Error("Invalid manual evidence execution identity");

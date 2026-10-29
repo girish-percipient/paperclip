@@ -77,7 +77,7 @@ async function walk(root: string, relative = ""): Promise<string[]> {
   return files;
 }
 
-function isAllowed(relative: string) {
+export function isStandardEvidencePath(relative: string) {
   const segments = relative.split(path.sep);
   if (segments.length === 1)
     return (
@@ -143,7 +143,7 @@ export async function packageEvidence(input: {
   const leaks: EvidencePackageResult["leaks"] = [];
   const available = await walk(input.privateDir);
 
-  for (const relative of available.filter(isAllowed)) {
+  for (const relative of available.filter(isStandardEvidencePath)) {
     const source = path.join(input.privateDir, relative);
     const extension = path.extname(relative).toLowerCase();
     const destination = path.join(input.uploadDir, relative);

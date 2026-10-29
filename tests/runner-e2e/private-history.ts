@@ -14,7 +14,8 @@ export const PRIVATE_ARCHIVE_BYTES = 264 * 1024 * 1024;
 
 export function privateArtifactKey(kind: string, runId: string) {
   if (!(["evidence", "report", "protocol-control", "protocol-report"].includes(kind)
-      || /^protocol-cell-[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(kind)) || !/^[1-9][0-9]{0,19}$/.test(runId)) {
+      || /^protocol-cell-[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(kind)
+      || /^manual-cell-[0-9a-f]{64}$/.test(kind) || kind === "manual-report") || !/^[1-9][0-9]{0,19}$/.test(runId)) {
     throw new Error("Private history needs a supported artifact kind and numeric workflow run ID");
   }
   return `${PRIVATE_HISTORY_PREFIX}/campaigns/gha-${runId}-1/${kind}.zip`;
