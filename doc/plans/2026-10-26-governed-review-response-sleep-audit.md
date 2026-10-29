@@ -571,3 +571,53 @@ identical to the previously qualified 0413 source; no SQL, executable history,
 journal or snapshot is regenerated. Earlier 2828-case acceptance and populated
 upgrade/replay evidence retain their earlier source scope. The remote PR remains
 held until its parent merges and fresh current-head CI and reviews pass.
+
+
+### Landed parent, Photon boundary and independent master contract
+
+Parent #17696 merged as `ec3b558277be5488c92e9b388e25300826caee89`
+from exact reviewed head `ef6cb73777f0c31e3622d23d039d702b2fc08263`,
+with 58 clean checks, Greptile 5/5 and unconditional Ponytail 5/5. The normal
+ancestry reconciliation proves whole parent/squash tree equality and preserves
+the complete held child tree, including the owned scope repair.
+
+A later security warning claimed Photon ownership assertions caused a global
+response reconstruction on every event. The existing callback already reads the
+endpoint under a row lock, requires attention status and transitions it to active
+or verifying before commit. The real published callback test disproved the claim:
+ten active assertions cause zero response hints and zero candidate SELECTs;
+three concurrent attention assertions cause exactly one hint and one SELECT,
+then return to quiet. The finding was resolved with that evidence and its
+current-head security check became successful. No production change was needed.
+The regression is retained here and covers both response workers with real
+Paperclip callbacks and PostgreSQL; the external Photon transport is mocked.
+The complete 22-case Photon file passes on this combined source. An earlier
+single-worker 21-case acceptance retains its own parent source scope.
+
+Master independently added the runtime activity contract in #18129 at
+`80a2b9284bf189e93ca4313085814548f48b8dc8`. Its 32 changed paths have no
+intersection with the owned sleep patch. A normal merge preserves both complete
+binary patches. The inherited contract changes event validation, redaction and
+UI event classification; it does not change this worker or its durable predicate.
+
+Combined source `586f5674cd9798b33cd22437255e0480b5726d20` passes
+**1297 distinct cases**: 1093 across five complete server files in 96.03 seconds
+(968 native-session, 22 Photon and 103 inherited contract cases), 185 in five
+complete runner files in 1.55 seconds, 14 Node protocol-contract cases in
+1614.48 milliseconds and five UI registry cases. These results are separate
+from the earlier 2053-case source; overlapping cases are not cumulatively counted.
+The three dedicated fresh 0413 fixtures and the live-event helper's own fresh
+database use PostgreSQL 17, with no source adaptations. All twelve new-context
+source hashes and all sixteen earlier scoped-qualification hashes match.
+Database build, server types/build, module boundaries, full-SHA migration order
+and generated TypeScript/Rust profile checks pass. The Runner vendor rebuild
+completes successfully for the new inherited inputs. No deployment or live
+external-provider qualification is claimed.
+
+The database tree remains identical to the qualified 0413 source. The populated
+upgrade evidence therefore retains its unchanged executable migration bytes;
+no new migration or snapshot generation was necessary. Before publication,
+the original owned patch and independent master patch are checked again as
+complete binary diffs, including the retained Photon test and this audit.
+Fresh exact-head CI, Greptile 5/5 and actionable review resolution remain merge
+gates for this PR.
