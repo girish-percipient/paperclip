@@ -29,7 +29,7 @@ async function prepare(env: NodeJS.ProcessEnv) {
   if (target === trusted) throw new Error("Trusted transfer code must be separate from target checkout");
   const launch = await readFile(path.join(target, "tests/runner-e2e/launch.ts"));
   if (hash(launch) !== approval.launchSha256) throw new Error("Target evidence launcher differs from protected approval");
-  for (const file of ["manual-private-handoff.ts", "manual-private-retention.ts"]) {
+  for (const file of ["manual-private-handoff.ts", "manual-private-retention.ts", "manual-private-report-assets.ts"]) {
     if (!(await readFile(path.join(target, "tests/runner-e2e", file))).equals(await readFile(path.join(trusted, "tests/runner-e2e", file))))
       throw new Error("Target private evidence protocol differs from trusted implementation");
   }
