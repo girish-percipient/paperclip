@@ -21,5 +21,5 @@ export async function isTrustedGeneratedReportAsset(relative: string, bytes: Buf
   const source = canonicalGeneratedReportAsset(relative);
   if (!source) return false;
   const metadata = await lstat(source).catch((error: NodeJS.ErrnoException) => { if (error.code === "ENOENT") return undefined; throw error; });
-  return !!metadata && metadata.isFile() && !metadata.isSymbolicLink() && bytes.equals(await readFile(source));
+  return !!metadata && metadata.isFile() && !metadata.isSymbolicLink() && metadata.size === bytes.length && bytes.equals(await readFile(source));
 }

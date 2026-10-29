@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { copyFile, lstat, mkdir, open, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { packageEvidence, isStandardEvidencePath, isStandardEvidenceFile, type EvidencePackageResult } from "./evidence.js";
-import { isTrustedGeneratedReportAsset } from "./manual-private-report-assets.js";
+import { canonicalGeneratedReportAsset, isTrustedGeneratedReportAsset } from "./manual-private-report-assets.js";
 import { assertSecretFree, normalizedSecrets } from "./redaction.js";
 import { MANUAL_PRIVATE_PROTOCOL, manualCellKind, type ManualRetentionIdentity } from "./manual-private-retention.js";
 
@@ -132,13 +132,18 @@ export async function sealManualResultEvidence(context: ManualPrivateHandoff, se
       assertSecretFree(name, scanSecrets, "private packaged evidence path");
       if (entry.isSymbolicLink() || !entry.isFile() && !entry.isDirectory() || name.split("/").length > 24) throw new Error("Invalid packaged evidence entry");
       if (entry.isDirectory()) { await visit(name); continue; }
-      const data = await readFile(path.join(root, name));
-      if (!isStandardEvidenceFile(`html-report/${name}`)) {
-        if (treeKind !== "generated-report" || !await isTrustedGeneratedReportAsset(name, data)) throw new Error("Unsupported packaged evidence carrier");
+      const standard = isStandardEvidenceFile(`html-report/${name}`);
+      if (!standard && (treeKind !== "generated-report" || !canonicalGeneratedReportAsset(name))) throw new Error("Unsupported packaged evidence carrier");
+      const file = path.join(root, name), metadata = await lstat(file);
+      if (!metadata.isFile() || metadata.isSymbolicLink()) throw new Error("Invalid packaged evidence entry");
+      if (metadata.size > 256 * 1024 * 1024 - bytes || records.length >= 4096) throw new Error("Complete packaged evidence exceeds allowance");
+      const data = await readFile(file);
+      if (!standard) {
+        if (!await isTrustedGeneratedReportAsset(name, data)) throw new Error("Unsupported packaged evidence carrier");
         assertSecretFree(data, scanSecrets, "authenticated static report asset");
       }
       bytes += data.length;
-      if (bytes > 256 * 1024 * 1024 || records.length >= 4096) throw new Error("Complete packaged evidence exceeds allowance");
+      if (bytes > 256 * 1024 * 1024) throw new Error("Complete packaged evidence exceeds allowance");
       records.push({ path: name, bytes: data.length, sha256: createHash("sha256").update(data).digest("hex") });
     }
   }
