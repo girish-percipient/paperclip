@@ -1922,8 +1922,8 @@ export function createHeartbeatRecovery(db: Db, dependencies: HeartbeatRecoveryD
 
   function cleanupRetainedNativeSession(input: { companyId: string; runId: string }) {
     const operation = reconcileRetainedNativeSessionCleanup(db, input);
-    // The worker receives the original outcome/error. Shutdown only needs to
-    // join its lifetime, including callbacks retained beyond a bounded attempt.
+
+
     const tracked = operation.then(() => undefined, () => undefined);
     activeRunExecutionPromises.add(tracked);
     void tracked.then(() => activeRunExecutionPromises.delete(tracked));

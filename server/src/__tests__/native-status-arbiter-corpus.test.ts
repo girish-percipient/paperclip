@@ -3102,8 +3102,8 @@ describe("P6-31 Section 18.13 executable status-authority corpus", () => {
           .where(eq(heartbeatRuns.id, seeded.runId));
         if (row?.phase === "committed" && row.status === "running") {
           consumedBeforeProjection = true;
-          // Delay the caller after the real decision commit. The first wake is
-          // reconciled while the run is still ineligible, before the later write.
+
+
           await flush();
           expect(cleanup).not.toHaveBeenCalled();
         }

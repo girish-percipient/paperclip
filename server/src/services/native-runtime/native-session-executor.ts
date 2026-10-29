@@ -3055,8 +3055,8 @@ export async function reconcileRetainedNativeSessionCleanup(
   db: Db,
   input: { companyId: string; runId: string },
 ): Promise<NativeCleanupOutcome> {
-  // A bounded attempt can end while its original database or process callback
-  // still owns work. Every caller must join that lifetime, including shutdown.
+
+
   const outcome = await inspectRetainedNativeSessionCleanup(db, input)
     .finally(() => drainRetainedRunnerdMaintenanceOperations());
   if (outcome.status === "deferred" && outcome.waitFor === "maintenance_settlement") {
@@ -3580,9 +3580,9 @@ async function inspectRetainedNativeSessionCleanup(
     });
   } catch (error) {
     releaseScope();
-    // Invalid persisted input and absent/changed proof artifacts cannot authorize
-    // cleanup. Database, commit and unexpected I/O failures are operational:
-    // preserve them for the caller's recovery path instead of dropping the run.
+
+
+
     const code = record(error).code;
     if (error instanceof SyntaxError || code === "native_execution_input_invalid"
       || code === "ENOENT" || code === "ENOTDIR" || code === "ELOOP"

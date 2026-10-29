@@ -2103,8 +2103,8 @@ export function retainedRunnerdMaintenanceIsIdle(directory: string): boolean {
   return !activeMaintenanceRoots.has(root) && !retainedMaintenanceOperations.has(root);
 }
 
-/** Wait for this controller's original operations; a timeout is not release.
- * This proves only local idleness, never physical retirement or retry authority. */
+
+
 export function waitForRetainedRunnerdMaintenanceIdle(directory: string): Promise<void> {
   const root = resolve(directory);
   if (retainedRunnerdMaintenanceIsIdle(root)) return Promise.resolve();

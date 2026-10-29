@@ -5427,8 +5427,8 @@ describe("retained native cleanup activation", () => {
         await expect(access(root)).rejects.toMatchObject({ code: "ENOENT" });
       }
       if (waitingFor && mode !== "active_provider_process") {
-        // The same physical operation can settle after the named blocker ends;
-        // deferral must release its temporary in-process session reservation.
+
+
         if (waitingFor === "process_exit") {
           run.processPid = 99_999_999;
           run.processGroupId = 99_999_999;

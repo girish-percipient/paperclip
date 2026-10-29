@@ -66,8 +66,8 @@ describeEmbeddedPostgres("attention service", () => {
   }, 30_000);
 
   afterEach(async () => {
-    // This suite owns its disposable database. Row-by-row foreign-key cleanup
-    // scales with the retained run history and can outlive the teardown hook.
+
+
     await db.execute(sql`TRUNCATE TABLE companies CASCADE`);
   });
 
