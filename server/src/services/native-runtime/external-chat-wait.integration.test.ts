@@ -1,3 +1,6 @@
+import { notifyChatRunMilestones } from "../chat-run-milestone-notifications.js";
+import { notifyNativeFinalizationWork } from "../native-finalization-notifications.js";
+import { accessService } from "../access.js";
 import { initializeRunIdentity } from "../run-identity.js";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -3027,6 +3030,57 @@ describe("native external-chat response wait", () => {
     expect(await recoverCommittedNativeReviewResponse(db, { ...fixture.input,
       ...(kind === "company" ? { companyId: randomUUID() } : {}) })).toBe(false);
     expect(await db.select().from(issueComments).where(eq(issueComments.createdByRunId, fixture.runId))).toHaveLength(0);
+  });
+
+  it.each(["milestone", "finalization"] as const)("ignores repeated unscoped routine %s hints without reconstructing dormant governed responses", async source => {
+    const fixture = await seedRecoverableReviewResponse();
+    await db.update(companyMemberships).set({ status: "suspended" }).where(and(
+      eq(companyMemberships.companyId, fixture.companyId), eq(companyMemberships.principalId, fixture.userId)));
+    const errors: unknown[] = [];
+    const coordinator = createDeliveryWorkCoordinator({ owner: db, canRun: () => true, onError: error => errors.push(error) });
+    const worker = nativeReviewResponseWork(db).register(coordinator, () => true);
+    try {
+      await worker.ready;
+      await expect.poll(() => ({ active: idleWorkSnapshot().active, next: coordinator.nextWakeAt() }), { timeout: 10_000 })
+        .toEqual({ active: 0, next: null });
+      const debug = db.$client.options.debug;
+      const queries: string[] = [];
+      db.$client.options.debug = (_connection, query) => {
+        if (query.startsWith("select") && query.includes("native_run_finalizations")) queries.push(query);
+      };
+      try {
+        for (let i = 0; i < 3; i++) {
+          await db.transaction(tx => source === "milestone" ? notifyChatRunMilestones(tx, { companyId: fixture.companyId })
+            : notifyNativeFinalizationWork(tx, { companyId: fixture.companyId }));
+          await expect.poll(() => ({ active: idleWorkSnapshot().active, next: coordinator.nextWakeAt() }), { timeout: 5000 })
+            .toEqual({ active: 0, next: null });
+        }
+        expect(queries).toEqual([]);
+      } finally { db.$client.options.debug = debug; }
+      expect(await db.select().from(issueComments).where(eq(issueComments.createdByRunId, fixture.runId))).toHaveLength(0);
+      expect(errors).toEqual([]);
+    } finally { await coordinator.stop(); }
+  });
+
+  it("wakes dormant governed responses through the real company membership restoration owner", async () => {
+    const fixture = await seedRecoverableReviewResponse();
+    const [member] = await db.select().from(companyMemberships).where(and(
+      eq(companyMemberships.companyId, fixture.companyId), eq(companyMemberships.principalId, fixture.userId)));
+    await db.update(companyMemberships).set({ status: "suspended" }).where(eq(companyMemberships.id, member.id));
+    const errors: unknown[] = [];
+    const coordinator = createDeliveryWorkCoordinator({ owner: db, canRun: () => true, onError: error => errors.push(error) });
+    const worker = nativeReviewResponseWork(db).register(coordinator, () => true);
+    try {
+      await worker.ready;
+      await expect.poll(() => ({ active: idleWorkSnapshot().active, next: coordinator.nextWakeAt() }), { timeout: 10_000 })
+        .toEqual({ active: 0, next: null });
+      expect(await db.select().from(issueComments).where(eq(issueComments.createdByRunId, fixture.runId))).toHaveLength(0);
+      await accessService(db).updateMember(fixture.companyId, member.id, { status: "active" });
+      await expect.poll(async () => ({ count: (await db.select().from(issueComments).where(eq(issueComments.createdByRunId, fixture.runId))).length,
+        active: idleWorkSnapshot().active, next: coordinator.nextWakeAt() }), { timeout: 5000 })
+        .toEqual({ count: 1, active: 0, next: null });
+      expect(errors).toEqual([]);
+    } finally { await coordinator.stop(); }
   });
 
   it.each(["approve", "reject", "cancel", "unlink"] as const)("reactivates dormant governed responses after approval %s", async action => {
